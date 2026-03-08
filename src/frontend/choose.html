@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>选择用户 - Oh Kanh Mini Game</title>
+    <link rel="icon" href="/favicon.ico" type="image/x-icon" />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body data-page="choose">
+    <div class="page-shell choose-shell">
+      <main class="layout-stack choose-layout">
+        <section class="card hero-card choose-hero">
+          <div class="hero-copy">
+            <p class="eyebrow">couple-home</p>
+            <h1 id="choose-page-title">Oh Kanh Mini Game</h1>
+            <p id="choose-page-subtitle">选一个身份进入。</p>
+          </div>
+          <div class="hero-status">
+            <span id="choose-last-user" class="pill soft">上次：yzy</span>
+            <span class="pill subtle">双人远程联机</span>
+          </div>
+        </section>
+
+        <section class="choose-grid">
+          <button class="card choose-card" type="button" data-choose-user="yzy">
+            <span class="choose-emoji">🫶</span>
+            <div>
+              <h2>以 yzy 进入</h2>
+            </div>
+            <p>进入首页、商城和管理。</p>
+          </button>
+
+          <button class="card choose-card" type="button" data-choose-user="wh">
+            <span class="choose-emoji">💞</span>
+            <div>
+              <h2>以 wh 进入</h2>
+            </div>
+            <p>进入首页和商城。</p>
+          </button>
+        </section>
+      </main>
+    </div>
+
+    <div id="toast" class="toast" hidden></div>
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>

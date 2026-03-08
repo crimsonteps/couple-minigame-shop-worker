@@ -1,0 +1,51 @@
+#!/bin/zsh
+set -euo pipefail
+
+PROJECT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PID_FILE="$PROJECT_DIR/.run/dev.pid"
+STOPPED=0
+
+if [ -f "$PID_FILE" ]; then
+  PID="$(cat "$PID_FILE" 2>/dev/null || true)"
+  if [ -n "${PID:-}" ] && kill -0 "$PID" 2>/dev/null; then
+    kill "$PID" 2>/dev/null || true
+    for _ in {1..10}; do
+      if ! kill -0 "$PID" 2>/dev/null; then
+        STOPPED=1
+        break
+      fi
+      sleep 1
+    done
+    if kill -0 "$PID" 2>/dev/null; then
+      kill -9 "$PID" 2>/dev/null || true
+      STOPPED=1
+    fi
+    echo "Stopped PID $PID"
+  fi
+  rm -f "$PID_FILE"
+fi
+
+for pattern in \
+  'npm run dev' \
+  'tsx watch src/index.ts' \
+  'node scripts/build-frontend.mjs --watch'
+do
+  pkill -f "$pattern" 2>/dev/null || true
+done
+
+if lsof -nP -iTCP:8787 -sTCP:LISTEN >/dev/null 2>&1; then
+  PORT_PID="$(lsof -tiTCP:8787 -sTCP:LISTEN | head -n 1)"
+  if [ -n "${PORT_PID:-}" ]; then
+    kill "$PORT_PID" 2>/dev/null || true
+    sleep 1
+    if kill -0 "$PORT_PID" 2>/dev/null; then
+      kill -9 "$PORT_PID" 2>/dev/null || true
+    fi
+    echo "Stopped port listener PID $PORT_PID"
+    STOPPED=1
+  fi
+fi
+
+if [ "$STOPPED" -eq 0 ]; then
+  echo "No running dev server found."
+fi

@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Oh Kanh Mini Game - 商城</title>
+    <link rel="icon" href="/favicon.ico" type="image/x-icon" />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body data-page="shop">
+    <div class="page-shell">
+      <header class="topbar">
+        <div class="brand-box">
+          <h1>礼物兑换站</h1>
+        </div>
+        <nav class="nav-strip">
+          <a data-page-link href="/index.html">首页</a>
+          <a data-page-link href="/shop.html">商城</a>
+          <a data-page-link href="/records.html">记录</a>
+          <a data-page-link data-admin-only href="/admin.html">管理</a>
+        </nav>
+        <div class="identity-panel">
+          <span class="pill soft identity-avatar" data-current-user-display></span>
+        </div>
+      </header>
+
+      <main class="layout-stack">
+        <section class="card hero-card">
+          <div class="hero-copy">
+            <h2>挑个礼物</h2>
+          </div>
+          <div class="hero-status">
+            <span id="shop-balance-pill" class="pill soft">积分 --</span>
+            <span id="shop-server-time" class="meta-text">--</span>
+          </div>
+        </section>
+
+        <section class="card">
+          <div class="section-head compact">
+            <div>
+              <p class="eyebrow">商品清单</p>
+              <h3>礼物</h3>
+            </div>
+          </div>
+          <div id="shop-grid" class="shop-grid"></div>
+        </section>
+
+        <section class="card">
+          <div class="section-head compact">
+            <div>
+              <p class="eyebrow">最近兑换</p>
+              <h3>兑换记录</h3>
+            </div>
+          </div>
+          <ul id="shop-redemptions-list" class="timeline-list"></ul>
+        </section>
+      </main>
+    </div>
+
+    <div id="toast" class="toast" hidden></div>
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>

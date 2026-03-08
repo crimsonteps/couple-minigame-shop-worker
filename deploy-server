@@ -1,0 +1,130 @@
+#!/bin/zsh
+set -euo pipefail
+
+PROJECT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+SSH_KEY="${SSH_KEY:-$HOME/.ssh/id_ed25519_github}"
+REMOTE_HOST="${REMOTE_HOST:-root@47.111.27.3}"
+REMOTE_DIR="${REMOTE_DIR:-/opt/oh-kanh-mini-game}"
+APP_HOST="${APP_HOST:-0.0.0.0}"
+APP_PORT="${APP_PORT:-8787}"
+
+if ! command -v rsync >/dev/null 2>&1; then
+  echo "rsync not found. Install rsync first."
+  exit 1
+fi
+
+if ! command -v ssh >/dev/null 2>&1; then
+  echo "ssh not found. Install ssh first."
+  exit 1
+fi
+
+echo "Syncing project to $REMOTE_HOST:$REMOTE_DIR ..."
+
+rsync -rlptDz --delete \
+  --exclude='.git' \
+  --exclude='node_modules' \
+  --exclude='dist' \
+  --exclude='public' \
+  --exclude='data' \
+  --exclude='.logs' \
+  --exclude='.run' \
+  --exclude='.tmp-tools' \
+  -e "ssh -o ConnectTimeout=10 -i $SSH_KEY" \
+  "$PROJECT_DIR/" \
+  "$REMOTE_HOST:$REMOTE_DIR/"
+
+echo "Building and restarting remote service ..."
+
+ssh -o ConnectTimeout=10 -i "$SSH_KEY" "$REMOTE_HOST" \
+  "REMOTE_DIR='$REMOTE_DIR' APP_HOST='$APP_HOST' APP_PORT='$APP_PORT' bash -s" <<'EOF'
+set -euo pipefail
+
+cd "$REMOTE_DIR"
+mkdir -p .logs .run
+
+if ! command -v npm >/dev/null 2>&1; then
+  echo "npm not found on remote server."
+  exit 1
+fi
+
+npm ci
+npm run build
+
+find_port_pids() {
+  if command -v lsof >/dev/null 2>&1; then
+    lsof -tiTCP:"$APP_PORT" -sTCP:LISTEN 2>/dev/null || true
+    return
+  fi
+
+  if command -v ss >/dev/null 2>&1; then
+    ss -ltnp 2>/dev/null | awk -v port=":$APP_PORT" '$4 ~ port {print $NF}' | grep -oE 'pid=[0-9]+' | cut -d= -f2 || true
+  fi
+}
+
+wait_for_pid_exit() {
+  pid="$1"
+  for _ in {1..10}; do
+    if ! kill -0 "$pid" 2>/dev/null; then
+      return 0
+    fi
+    sleep 1
+  done
+  return 1
+}
+
+OLD_PID="$(cat .run/server.pid 2>/dev/null || true)"
+
+if [ -n "${OLD_PID:-}" ] && kill -0 "$OLD_PID" 2>/dev/null; then
+  kill "$OLD_PID" 2>/dev/null || true
+  if ! wait_for_pid_exit "$OLD_PID"; then
+    kill -9 "$OLD_PID" 2>/dev/null || true
+  fi
+fi
+
+pkill -f "$REMOTE_DIR/dist/server.js" 2>/dev/null || true
+
+for pid in $(find_port_pids); do
+  kill "$pid" 2>/dev/null || true
+  if ! wait_for_pid_exit "$pid"; then
+    kill -9 "$pid" 2>/dev/null || true
+  fi
+done
+
+if [ -n "$(find_port_pids)" ]; then
+  echo "Port $APP_PORT is still in use before restart."
+  ss -ltnp 2>/dev/null | grep ":$APP_PORT" || true
+  exit 1
+fi
+
+nohup env HOST="$APP_HOST" PORT="$APP_PORT" npm run start > .logs/server.log 2>&1 < /dev/null &
+NEW_PID=$!
+echo "$NEW_PID" > .run/server.pid
+
+sleep 2
+
+if ! kill -0 "$NEW_PID" 2>/dev/null; then
+  echo "Remote server failed to start. Recent log:"
+  tail -n 80 .logs/server.log || true
+  exit 1
+fi
+
+if [ -z "$(find_port_pids)" ]; then
+  echo "Remote server started but did not bind port $APP_PORT. Recent log:"
+  tail -n 80 .logs/server.log || true
+  exit 1
+fi
+
+echo "Remote server started. PID: $NEW_PID"
+echo "Health check:"
+curl -sf "http://127.0.0.1:$APP_PORT/api/health"
+echo
+echo "Recent log:"
+tail -n 20 .logs/server.log || true
+EOF
+
+echo
+echo "Deploy completed."
+echo "Remote host: $REMOTE_HOST"
+echo "Remote dir: $REMOTE_DIR"
+echo "App port: $APP_PORT"

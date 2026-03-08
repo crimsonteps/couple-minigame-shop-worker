@@ -1,0 +1,29 @@
+
+> couple-minigame-shop@1.0.0 dev
+> npm-run-all --parallel dev:frontend dev:server
+
+
+> couple-minigame-shop@1.0.0 dev:server
+> tsx watch src/index.ts
+
+
+> couple-minigame-shop@1.0.0 dev:frontend
+> node scripts/build-frontend.mjs --watch
+
+Watching frontend sources...
+[watch] build finished, watching for changes...
+Oh Kanh Mini Game server listening on http://0.0.0.0:8787
+Database path: /Users/yzy/Code/couple-minigame-shop-worker/data/couple-home.sqlite
+[watch] build started (change: "src/frontend/app.ts")
+[watch] build finished
+[watch] build started (change: "src/frontend/app.ts")
+[watch] build finished
+[watch] build started (change: "src/frontend/app.ts")
+[watch] build finished
+[watch] build started (change: "src/shared/constants.ts")
+[watch] build finished
+11:56:03 PM [tsx] change in ./src/room/storage/migrations.ts Restarting...
+cOh Kanh Mini Game server listening on http://0.0.0.0:8787
+Database path: /Users/yzy/Code/couple-minigame-shop-worker/data/couple-home.sqlite
+[watch] build started (change: "src/frontend/app.ts")
+[watch] build finished

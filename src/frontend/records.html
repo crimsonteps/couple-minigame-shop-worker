@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Oh Kanh Mini Game - 记录</title>
+    <link rel="icon" href="/favicon.ico" type="image/x-icon" />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body data-page="records">
+    <div class="page-shell">
+      <header class="topbar">
+        <div class="brand-box">
+          <h1>游戏与兑换流水</h1>
+        </div>
+        <nav class="nav-strip">
+          <a data-page-link href="/index.html">首页</a>
+          <a data-page-link href="/shop.html">商城</a>
+          <a data-page-link href="/records.html">记录</a>
+          <a data-page-link data-admin-only href="/admin.html">管理</a>
+        </nav>
+        <div class="identity-panel">
+          <span class="pill soft identity-avatar" data-current-user-display></span>
+        </div>
+      </header>
+
+      <main class="layout-stack">
+        <section class="card hero-card">
+          <div class="hero-copy">
+            <p class="eyebrow">都在这里</p>
+            <h2>游戏和兑换记录</h2>
+          </div>
+          <div class="hero-status">
+            <span id="records-score-pill" class="pill soft">积分 --</span>
+            <span id="records-server-time" class="meta-text">--</span>
+          </div>
+        </section>
+
+        <section class="dual-grid">
+          <div class="card">
+            <div class="section-head compact">
+              <div>
+                <p class="eyebrow">最近战绩</p>
+                <h3>游戏记录</h3>
+              </div>
+            </div>
+            <ul id="records-games-list" class="timeline-list"></ul>
+          </div>
+          <div class="card">
+            <div class="section-head compact">
+              <div>
+                <p class="eyebrow">最近兑换</p>
+                <h3>礼物记录</h3>
+              </div>
+            </div>
+            <ul id="records-redemptions-list" class="timeline-list"></ul>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <div id="toast" class="toast" hidden></div>
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>
