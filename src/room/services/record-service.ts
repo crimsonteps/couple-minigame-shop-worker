@@ -1,5 +1,5 @@
 import { DEFAULT_RECENT_LIMIT, FIXED_ROOM_ID, PRIMARY_USER_ID, SECONDARY_USER_ID } from "../../shared/constants";
-import type { GameRecord, GameType, RedemptionRecord, RoomId, ScoreBoard, UserId } from "../../shared/types";
+import type { GameRecord, GameType, GiftCard, RedemptionRecord, RoomId, ScoreBoard, UserId } from "../../shared/types";
 import type { RoomStorage } from "../storage/types";
 
 interface GameRoundRow {
@@ -26,6 +26,11 @@ interface RedemptionRow {
   item_name: string;
   room_id: RoomId;
   user_id: UserId;
+}
+
+interface GiftCardRow extends RedemptionRow {
+  description: string | null;
+  emoji: string | null;
 }
 
 export class RecordService {
@@ -130,6 +135,30 @@ export class RecordService {
     return rows.map((row) => this.toRedemptionRecord(row));
   }
 
+  listGiftCardsByUser(userId: UserId): GiftCard[] {
+    const rows = this.storage.sql.exec<GiftCardRow>(
+      `
+        SELECT
+          redemptions.id,
+          redemptions.room_id,
+          redemptions.item_id,
+          redemptions.item_name,
+          redemptions.user_id,
+          redemptions.cost,
+          redemptions.created_at,
+          shop_items.emoji,
+          shop_items.description
+        FROM redemptions
+        LEFT JOIN shop_items ON shop_items.id = redemptions.item_id
+        WHERE redemptions.user_id = ?
+        ORDER BY redemptions.id DESC
+      `,
+      userId,
+    ).toArray();
+
+    return rows.map((row) => this.toGiftCard(row));
+  }
+
   insertRedemptionRecord(input: {
     cost: number;
     createdAt: string;
@@ -208,6 +237,20 @@ export class RecordService {
       itemName: row.item_name,
       roomId: row.room_id,
       userId: row.user_id,
+    };
+  }
+
+  private toGiftCard(row: GiftCardRow): GiftCard {
+    return {
+      cost: Number(row.cost),
+      createdAt: row.created_at,
+      description: row.description ?? "已收藏到礼物卡片。",
+      emoji: row.emoji ?? "🎁",
+      id: Number(row.id),
+      itemId: row.item_id,
+      itemName: row.item_name,
+      ownerId: row.user_id,
+      serial: `OK-${String(row.id).padStart(4, "0")}`,
     };
   }
 }

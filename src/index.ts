@@ -14,6 +14,7 @@ import {
 } from "./api/admin";
 import { handleDashboardRequest } from "./api/dashboard";
 import { handleHealthRequest } from "./api/health";
+import { handleProfileRequest } from "./api/profile";
 import { handleRecordsRequest } from "./api/records";
 import { handleShopRedeemRequest, handleShopRequest } from "./api/shop";
 import { CoupleRoom } from "./room/CoupleRoom";
@@ -74,6 +75,10 @@ export async function handleAppRequest(request: Request, context: AppContext): P
 
     if (url.pathname === "/api/records") {
       return handleRecordsRequest(request, context);
+    }
+
+    if (url.pathname === "/api/profile") {
+      return handleProfileRequest(request, context);
     }
 
     if (url.pathname === "/api/health") {
@@ -163,6 +168,8 @@ function getContentType(assetPath: string): string {
       return "application/json; charset=UTF-8";
     case ".map":
       return "application/json; charset=UTF-8";
+    case ".svg":
+      return "image/svg+xml; charset=UTF-8";
     default:
       return "application/octet-stream";
   }

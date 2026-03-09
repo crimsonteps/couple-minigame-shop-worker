@@ -70,6 +70,18 @@ export interface RedemptionRecord {
   createdAt: string;
 }
 
+export interface GiftCard {
+  id: number;
+  itemId: string;
+  itemName: string;
+  emoji: string;
+  description: string;
+  cost: number;
+  createdAt: string;
+  ownerId: UserId;
+  serial: string;
+}
+
 export interface PersistedRoundState {
   roundId: number;
   gameType: GameType;
@@ -145,6 +157,12 @@ export interface AdminPageData {
   serverTime: string;
   shopItems: ShopItem[];
   users: UserProfile[];
+}
+
+export interface ProfilePageData {
+  giftCards: GiftCard[];
+  serverTime: string;
+  user: UserProfile;
 }
 
 export interface GameResolution {

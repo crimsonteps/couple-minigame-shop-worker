@@ -15,9 +15,11 @@ import type {
   AdminPageData,
   ApiResponse,
   DashboardSnapshot,
+  GiftCard,
   GameRecord,
   GameType,
   OnlineStatus,
+  ProfilePageData,
   RecordsPageData,
   RedemptionRecord,
   RoundSnapshot,
@@ -30,20 +32,26 @@ import { gameTypeLabel, isAdminUserId, normalizeUserId, userAvatar, userLabel } 
 
 const USER_STORAGE_KEY = "couple-home.current-user";
 const GAME_STORAGE_KEY = "couple-home.selected-game";
+const THEME_STORAGE_KEY = "couple-home.theme";
 const RECONNECT_DELAY_MS = 3000;
-const page = (document.body.dataset.page ?? "dashboard") as "choose" | "dashboard" | "shop" | "records" | "admin";
+const page = (document.body.dataset.page ?? "dashboard") as "choose" | "dashboard" | "shop" | "records" | "profile" | "admin";
+type ThemeMode = "light" | "dark";
 
 interface ClientState {
   adminData: AdminPageData | null;
   currentUser: UserId;
   dashboard: DashboardSnapshot | null;
   guessNumberDraft: string;
+  pokedUserId: UserId | null;
+  pokeTimer: number | null;
+  profileData: ProfilePageData | null;
   recordsData: RecordsPageData | null;
   reconnectTimer: number | null;
   selectedGameType: GameType;
   shopData: ShopPageData | null;
   socket: WebSocket | null;
   socketVersion: number;
+  theme: ThemeMode;
   toastTimer: number | null;
 }
 
@@ -52,19 +60,25 @@ const state: ClientState = {
   currentUser: loadStoredUser(),
   dashboard: null,
   guessNumberDraft: "",
+  pokedUserId: null,
+  pokeTimer: null,
+  profileData: null,
   recordsData: null,
   reconnectTimer: null,
   selectedGameType: loadSelectedGameType(),
   shopData: null,
   socket: null,
   socketVersion: 0,
+  theme: loadTheme(),
   toastTimer: null,
 };
 
+applyTheme(state.theme);
 void init();
 
 async function init(): Promise<void> {
   bindCommonEvents();
+  updateThemeToggle();
 
   if (page === "choose") {
     renderChoosePage();
@@ -105,6 +119,15 @@ async function init(): Promise<void> {
 }
 
 function bindCommonEvents(): void {
+  document.querySelectorAll<HTMLButtonElement>("[data-theme-toggle]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.theme = state.theme === "dark" ? "light" : "dark";
+      applyTheme(state.theme);
+      saveTheme(state.theme);
+      updateThemeToggle();
+    });
+  });
+
   document.querySelectorAll<HTMLButtonElement>("[data-choose-user]").forEach((button) => {
     button.addEventListener("click", () => {
       const userId = normalizeUserId(button.dataset.chooseUser);
@@ -152,6 +175,40 @@ function bindCommonEvents(): void {
       gameType: getDisplayedGameType(),
       type: "game:start",
     });
+  });
+
+  document.getElementById("score-grid")?.addEventListener("click", (event) => {
+    const target = event.target;
+
+    if (!(target instanceof HTMLElement)) {
+      return;
+    }
+
+    const button = target.closest<HTMLButtonElement>("[data-poke-user]");
+
+    if (!button) {
+      return;
+    }
+
+    const targetUserId = normalizeUserId(button.dataset.pokeUser);
+
+    if (!targetUserId || targetUserId === state.currentUser) {
+      return;
+    }
+
+    triggerPokeVisual(targetUserId);
+
+    const targetUser = getUsers().find((user) => user.id === targetUserId);
+
+    if (targetUser?.online) {
+      sendSocketMessage({
+        targetUserId,
+        type: "user:poke",
+      });
+      return;
+    }
+
+    showToast(`${targetUserId} 还没到，先帮你轻轻催一下。`);
   });
 
   document.getElementById("game-panel")?.addEventListener("click", (event) => {
@@ -367,6 +424,11 @@ async function loadInitialData(): Promise<void> {
     return;
   }
 
+  if (page === "profile") {
+    state.profileData = await apiRequest<ProfilePageData>(`/api/profile?user=${state.currentUser}`);
+    return;
+  }
+
   state.recordsData = await apiRequest<RecordsPageData>("/api/records");
 }
 
@@ -453,6 +515,9 @@ function handleSocketMessage(rawMessage: string): void {
   }
 
   if (message.type === "notice") {
+    if (page === "dashboard" && message.payload.text.includes("心动提醒")) {
+      triggerPokeVisual(state.currentUser);
+    }
     showToast(message.payload.text, message.payload.level === "info" ? undefined : message.payload.level);
     return;
   }
@@ -493,6 +558,11 @@ function render(): void {
     return;
   }
 
+  if (page === "profile") {
+    renderProfilePage();
+    return;
+  }
+
   renderRecordsPage();
 }
 
@@ -519,7 +589,9 @@ function renderChoosePage(): void {
 }
 
 function renderDashboardPage(): void {
-  renderScoreGrid(document.getElementById("score-grid"), getUsers());
+  const users = getUsers();
+  updateDashboardMood(users);
+  renderScoreGrid(document.getElementById("score-grid"), users);
   renderServerTime(document.getElementById("server-time"), getServerTime());
   renderGameArea();
   renderGamesList(document.getElementById("recent-games-list"), getRecentGames());
@@ -851,6 +923,84 @@ function renderRecordsPage(): void {
   renderRedemptionsList(document.getElementById("records-redemptions-list"), getRecentRedemptions());
 }
 
+function renderProfilePage(): void {
+  renderServerTime(document.getElementById("profile-server-time"), getServerTime() ?? state.profileData?.serverTime ?? null);
+  const scorePill = document.getElementById("profile-score-pill");
+
+  if (scorePill) {
+    scorePill.textContent = `${state.currentUser} · ${getCurrentUserScore()} 分`;
+  }
+
+  renderProfileSummary(document.getElementById("profile-summary"));
+  renderGiftCards(document.getElementById("gift-card-grid"), state.profileData?.giftCards ?? []);
+}
+
+function renderProfileSummary(container: HTMLElement | null): void {
+  if (!container) {
+    return;
+  }
+
+  const user = getCurrentUserProfile();
+
+  if (!user) {
+    container.innerHTML = `<div class="empty-card">还没有个人资料。</div>`;
+    return;
+  }
+
+  container.innerHTML = `
+    <article class="profile-panel">
+      <div class="profile-panel-head">
+        <span class="profile-panel-avatar">${userAvatar(user.id)}</span>
+        <div>
+          <p class="eyebrow">${escapeHtml(user.id)}</p>
+          <h3>${escapeHtml(user.displayName)}</h3>
+        </div>
+      </div>
+      <div class="profile-points">
+        <strong>${user.score}</strong>
+        <span>当前积分</span>
+      </div>
+      <div class="profile-meta-row">
+        <span class="pill ${user.online ? "online" : "offline"}">${user.online ? "已就位" : "正在赶来"}</span>
+        <span class="profile-meta-text">礼物卡 ${state.profileData?.giftCards.length ?? 0} 张</span>
+      </div>
+    </article>
+  `;
+}
+
+function renderGiftCards(container: HTMLElement | null, giftCards: GiftCard[]): void {
+  if (!container) {
+    return;
+  }
+
+  if (!giftCards.length) {
+    container.innerHTML = `<div class="empty-card">还没有礼物卡片，先去商城兑换一个。</div>`;
+    return;
+  }
+
+  container.innerHTML = giftCards
+    .map(
+      (card) => `
+        <article class="gift-card">
+          <div class="gift-card-glow"></div>
+          <div class="gift-card-head">
+            <span class="gift-card-emoji">${escapeHtml(card.emoji)}</span>
+            <div>
+              <p class="eyebrow">${escapeHtml(card.serial)}</p>
+              <h3>${escapeHtml(card.itemName)}</h3>
+            </div>
+          </div>
+          <p class="gift-card-desc">${escapeHtml(card.description)}</p>
+          <div class="gift-card-meta">
+            <span>${card.cost} 分兑换</span>
+            <span>${formatDateTime(card.createdAt)}</span>
+          </div>
+        </article>
+      `,
+    )
+    .join("");
+}
+
 function renderScoreGrid(container: HTMLElement | null, users: UserProfile[]): void {
   if (!container) {
     return;
@@ -861,31 +1011,214 @@ function renderScoreGrid(container: HTMLElement | null, users: UserProfile[]): v
     return;
   }
 
-  container.innerHTML = users
-    .map((user) => {
-      const currentUserClass = user.id === state.currentUser ? "current-user" : "";
+  const round = getCurrentRound();
+  const onlineStatus = getOnlineStatus();
+  const leftUser = users.find((user) => user.id === PRIMARY_USER_ID) ?? users[0];
+  const rightUser = users.find((user) => user.id === SECONDARY_USER_ID) ?? users[1] ?? users[0];
+  const readyUsers = getReadyUsers(round, onlineStatus);
+  const bondState = getBondState(round, onlineStatus);
 
-      return `
-        <article class="score-card ${currentUserClass}">
-          <div class="score-card-head">
-            <div class="score-label">
-              <span class="avatar-badge">${userAvatar(user.id)}</span>
-              <div>
-                <p class="eyebrow">${escapeHtml(user.id)}</p>
-                <h3>${escapeHtml(user.displayName)}</h3>
-              </div>
-            </div>
-            <span class="pill ${user.online ? "online" : "offline"}">${user.online ? "在线" : "离线"}</span>
-          </div>
-          <div class="score-number">${user.score}</div>
-          <div class="status-row">
-            <span class="status-dot ${user.online ? "online" : ""}"></span>
-            <span>${user.online ? "在线中" : "未在线"}</span>
-          </div>
-        </article>
-      `;
-    })
-    .join("");
+  container.innerHTML = `
+    <div class="bond-board bond-state-${bondState}">
+      ${renderBondPlayer(leftUser, "left", round, onlineStatus, readyUsers)}
+      <div class="bond-stage">
+        <div class="bond-progress" aria-hidden="true">
+          <span class="bond-progress-line left"></span>
+          <span class="bond-progress-line right"></span>
+        </div>
+        <div class="bond-orb">
+          <span class="bond-orb-label">${buildBondOrbLabel(bondState)}</span>
+          <span class="bond-spark spark-a"></span>
+          <span class="bond-spark spark-b"></span>
+          <span class="bond-spark spark-c"></span>
+          <span class="bond-spark spark-d"></span>
+        </div>
+        <p class="bond-center-note">${buildBondCenterNote(bondState, round, readyUsers.length)}</p>
+      </div>
+      ${renderBondPlayer(rightUser, "right", round, onlineStatus, readyUsers)}
+    </div>
+  `;
+}
+
+function renderBondPlayer(
+  user: UserProfile,
+  side: "left" | "right",
+  round: RoundSnapshot,
+  onlineStatus: OnlineStatus,
+  readyUsers: UserId[],
+): string {
+  const isReady = readyUsers.includes(user.id);
+  const isCollecting = round.status === "collecting";
+  const isCurrentUser = user.id === state.currentUser;
+  const otherUserId = user.id === PRIMARY_USER_ID ? SECONDARY_USER_ID : PRIMARY_USER_ID;
+  const otherOnline = onlineStatus[otherUserId];
+  const shouldShowBubble = user.online;
+  const canPoke = !isCurrentUser;
+  const actionLabel = user.online ? "比个心" : "戳一戳";
+
+  return `
+    <article class="bond-player ${side} ${user.online ? "online" : "offline"} ${isReady ? "ready" : ""} ${
+      isCurrentUser ? "current-user" : ""
+    } ${state.pokedUserId === user.id ? "poked" : ""}">
+      ${
+        shouldShowBubble
+          ? `<span class="bond-bubble ${isReady ? "ready" : "online"}">${escapeHtml(
+              buildBondBubbleLabel(user.id, round, otherOnline),
+            )}</span>`
+          : ""
+      }
+      <div class="bond-avatar-wrap">
+        <span class="bond-avatar-ring"></span>
+        <span class="bond-avatar">${userAvatar(user.id)}</span>
+      </div>
+      <div class="bond-copy">
+        <p class="bond-name">${escapeHtml(user.displayName)}</p>
+        <p class="bond-status">${escapeHtml(buildBondStatusLabel(user.id, user.online, isReady, isCollecting, otherOnline))}</p>
+      </div>
+      <div class="bond-score">
+        <strong>${user.score}</strong>
+        <span>分</span>
+      </div>
+      ${canPoke ? `<button class="bond-action" type="button" data-poke-user="${user.id}">${actionLabel}</button>` : ""}
+    </article>
+  `;
+}
+
+function getReadyUsers(round: RoundSnapshot, onlineStatus: OnlineStatus): UserId[] {
+  if (round.status === "collecting") {
+    return round.choicesSubmitted;
+  }
+
+  return FIXED_USER_IDS.filter((userId) => onlineStatus[userId]);
+}
+
+function getBondState(round: RoundSnapshot, onlineStatus: OnlineStatus): string {
+  const allOnline = FIXED_USER_IDS.every((userId) => onlineStatus[userId]);
+
+  if (allOnline && round.status === "resolved") {
+    return "burst";
+  }
+
+  if (round.status === "collecting" && round.choicesSubmitted.length === 1) {
+    return round.choicesSubmitted[0] === PRIMARY_USER_ID ? "ready-left" : "ready-right";
+  }
+
+  if (allOnline) {
+    return "linked";
+  }
+
+  if (onlineStatus[PRIMARY_USER_ID]) {
+    return "ready-left";
+  }
+
+  if (onlineStatus[SECONDARY_USER_ID]) {
+    return "ready-right";
+  }
+
+  return "idle";
+}
+
+function buildBondOrbLabel(bondState: string): string {
+  if (bondState === "burst") {
+    return "Boom";
+  }
+
+  if (bondState === "idle") {
+    return "Wait";
+  }
+
+  return "Ready";
+}
+
+function buildBondCenterNote(bondState: string, round: RoundSnapshot, readyCount: number): string {
+  if (bondState === "burst") {
+    return "合体成功";
+  }
+
+  if (round.status === "collecting" && readyCount === 1) {
+    return "等另一位出手";
+  }
+
+  if (bondState === "linked") {
+    return "双人已连线";
+  }
+
+  if (bondState === "ready-left" || bondState === "ready-right") {
+    return "信号正在靠近";
+  }
+
+  return "等待连线";
+}
+
+function buildBondBubbleLabel(userId: UserId, round: RoundSnapshot, otherOnline: boolean): string {
+  if (round.status === "collecting" && round.choicesSubmitted.includes(userId)) {
+    return "Ready!";
+  }
+
+  if (otherOnline) {
+    return "已就位";
+  }
+
+  return "我来了";
+}
+
+function buildBondStatusLabel(
+  userId: UserId,
+  isOnline: boolean,
+  isReady: boolean,
+  isCollecting: boolean,
+  otherOnline: boolean,
+): string {
+  if (!isOnline) {
+    return otherOnline ? "等得花儿都谢了" : "正在赶来";
+  }
+
+  if (isCollecting) {
+    return isReady ? "已就位" : "还没出手";
+  }
+
+  if (otherOnline) {
+    return "已就位";
+  }
+
+  return userId === state.currentUser ? "先守在这" : "刚刚到场";
+}
+
+function triggerPokeVisual(userId: UserId): void {
+  state.pokedUserId = userId;
+
+  if (state.pokeTimer !== null) {
+    window.clearTimeout(state.pokeTimer);
+  }
+
+  renderScoreGrid(document.getElementById("score-grid"), getUsers());
+
+  state.pokeTimer = window.setTimeout(() => {
+    state.pokedUserId = null;
+    renderScoreGrid(document.getElementById("score-grid"), getUsers());
+  }, 1800);
+}
+
+function updateDashboardMood(users: UserProfile[]): void {
+  if (page !== "dashboard") {
+    return;
+  }
+
+  const onlineCount = users.filter((user) => user.online).length;
+  const round = getCurrentRound();
+  const readyCount = round.status === "collecting" ? round.choicesSubmitted.length : onlineCount;
+
+  if (onlineCount === 2 && readyCount >= 2) {
+    document.body.dataset.dashboardMood = "synced";
+    return;
+  }
+
+  if (onlineCount > 0) {
+    document.body.dataset.dashboardMood = "seeking";
+    return;
+  }
+
+  document.body.dataset.dashboardMood = "idle";
 }
 
 function renderGameArea(): void {
@@ -1141,7 +1474,15 @@ function getUsers(): UserProfile[] {
     return state.recordsData.users;
   }
 
+  if (state.profileData) {
+    return [state.profileData.user];
+  }
+
   return [];
+}
+
+function getCurrentUserProfile(): UserProfile | null {
+  return getUsers().find((user) => user.id === state.currentUser) ?? state.profileData?.user ?? null;
 }
 
 function getCurrentUserScore(): number {
@@ -1228,6 +1569,10 @@ function getServerTime(): string | null {
     return state.recordsData.serverTime;
   }
 
+  if (state.profileData) {
+    return state.profileData.serverTime;
+  }
+
   if (state.adminData) {
     return state.adminData.serverTime;
   }
@@ -1254,6 +1599,7 @@ function syncNavLinks(): void {
 function renderNavLinks(): void {
   const currentPath = window.location.pathname;
   const showAdminLink = isCurrentUserAdmin();
+  document.body.dataset.isAdmin = showAdminLink ? "true" : "false";
 
   document.querySelectorAll<HTMLAnchorElement>("[data-page-link]").forEach((link) => {
     const linkPath = new URL(link.href, window.location.origin).pathname;
@@ -1340,6 +1686,42 @@ function loadSelectedGameType(): GameType {
   }
 
   return "rps";
+}
+
+function loadTheme(): ThemeMode {
+  try {
+    const stored = localStorage.getItem(THEME_STORAGE_KEY);
+
+    if (stored === "dark" || stored === "light") {
+      return stored;
+    }
+  } catch {
+    // Ignore storage errors and fall back to system preference.
+  }
+
+  return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+}
+
+function saveTheme(theme: ThemeMode): void {
+  try {
+    localStorage.setItem(THEME_STORAGE_KEY, theme);
+  } catch {
+    // Ignore storage errors and keep current session theme only.
+  }
+}
+
+function applyTheme(theme: ThemeMode): void {
+  document.documentElement.dataset.theme = theme;
+}
+
+function updateThemeToggle(): void {
+  document.querySelectorAll<HTMLButtonElement>("[data-theme-toggle]").forEach((button) => {
+    const nextTheme = state.theme === "dark" ? "light" : "dark";
+    const label = nextTheme === "dark" ? "切换到暗夜模式" : "切换到亮色模式";
+    button.textContent = nextTheme === "dark" ? "☾" : "☀";
+    button.setAttribute("aria-label", label);
+    button.setAttribute("title", label);
+  });
 }
 
 function redirectToChoosePage(): void {

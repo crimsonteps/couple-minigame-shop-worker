@@ -1,9 +1,10 @@
 import { AppError, ValidationError } from "../shared/errors";
 import type { ClientMessage, NoticeLevel, ServerMessage } from "../shared/protocol";
-import { assertGameType, assertInteger, assertRpsChoice } from "../shared/utils";
+import { assertGameType, assertInteger, assertRpsChoice, assertUserId } from "../shared/utils";
 import type { UserId } from "../shared/types";
 
 export interface ProtocolRoomActions {
+  pokeUser(userId: UserId, targetUserId: UserId): void;
   startGame(userId: UserId, gameType: ReturnType<typeof assertGameType>): void;
   submitGuessNumber(userId: UserId, value: number): void;
   submitRpsChoice(userId: UserId, choice: ReturnType<typeof assertRpsChoice>): void;
@@ -34,6 +35,13 @@ export function parseClientMessage(rawMessage: string | ArrayBuffer | ArrayBuffe
 
   if (payload.type === "dashboard:sync") {
     return { type: "dashboard:sync" };
+  }
+
+  if (payload.type === "user:poke") {
+    return {
+      targetUserId: assertUserId(payload.targetUserId),
+      type: "user:poke",
+    };
   }
 
   if (payload.type === "game:start") {
@@ -83,6 +91,9 @@ export function handleProtocolMessage(
   switch (message.type) {
     case "dashboard:sync":
       actions.sync(userId);
+      return;
+    case "user:poke":
+      actions.pokeUser(userId, message.targetUserId);
       return;
     case "game:start":
       actions.startGame(userId, message.gameType);

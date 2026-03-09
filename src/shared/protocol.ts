@@ -1,7 +1,8 @@
-import type { DashboardSnapshot, GameType, RpsChoice } from "./types";
+import type { DashboardSnapshot, GameType, RpsChoice, UserId } from "./types";
 
 export const CLIENT_MESSAGE_TYPES = [
   "dashboard:sync",
+  "user:poke",
   "game:start",
   "rps:choice",
   "telepathy:choice",
@@ -11,6 +12,7 @@ export const SERVER_MESSAGE_TYPES = ["snapshot", "notice", "error"] as const;
 
 export type ClientMessage =
   | { type: "dashboard:sync" }
+  | { type: "user:poke"; targetUserId: UserId }
   | { type: "game:start"; gameType: GameType }
   | { type: "rps:choice"; choice: RpsChoice }
   | { type: "telepathy:choice"; optionId: string }

@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Oh Kanh Mini Game - 管理后台</title>
+    <title>Oh Kanh Mini Game - 我的</title>
     <link rel="icon" href="/favicon.ico" type="image/x-icon" />
     <script>
       (() => {
@@ -21,12 +21,12 @@
     </script>
     <link rel="stylesheet" href="/styles.css" />
   </head>
-  <body data-page="admin">
+  <body data-page="profile">
     <button class="theme-toggle" type="button" data-theme-toggle></button>
     <div class="page-shell">
       <header class="topbar">
         <div class="brand-box">
-          <h1>管理</h1>
+          <h1>我的礼物库</h1>
         </div>
         <nav class="nav-strip">
           <a data-page-link href="/index.html">首页</a>
@@ -41,33 +41,34 @@
       </header>
 
       <main class="layout-stack">
-        <section class="card hero-card">
+        <section class="card hero-card profile-hero">
           <div class="hero-copy">
-            <h2>改积分和礼物</h2>
+            <h2>积分和礼物卡片</h2>
           </div>
           <div class="hero-status">
-            <span id="admin-server-time" class="meta-text">--</span>
+            <span id="profile-score-pill" class="pill soft">积分 --</span>
+            <span id="profile-server-time" class="meta-text">--</span>
           </div>
+        </section>
+
+        <section class="card profile-summary-card">
+          <div class="section-head compact">
+            <div>
+              <p class="eyebrow">个人信息</p>
+              <h3>我的积分</h3>
+            </div>
+          </div>
+          <div id="profile-summary" class="profile-summary"></div>
         </section>
 
         <section class="card">
           <div class="section-head compact">
             <div>
-              <p class="eyebrow">用户积分</p>
-              <h3>积分</h3>
+              <p class="eyebrow">礼物卡片</p>
+              <h3>我的收藏</h3>
             </div>
           </div>
-          <div id="admin-users-grid" class="admin-grid"></div>
-        </section>
-
-        <section class="card">
-          <div class="section-head compact">
-            <div>
-              <p class="eyebrow">商品管理</p>
-              <h3>礼物</h3>
-            </div>
-          </div>
-          <div id="admin-shop-grid" class="admin-grid"></div>
+          <div id="gift-card-grid" class="gift-card-grid"></div>
         </section>
       </main>
     </div>

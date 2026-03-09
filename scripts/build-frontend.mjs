@@ -8,7 +8,7 @@ const rootDir = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const frontendDir = resolve(rootDir, "src/frontend");
 const publicDir = resolve(rootDir, "public");
 const watchMode = process.argv.includes("--watch");
-const staticFiles = ["choose.html", "index.html", "shop.html", "records.html", "admin.html", "styles.css", "favicon.ico", "pixel-avatar.svg"];
+const staticFiles = ["choose.html", "index.html", "shop.html", "records.html", "profile.html", "admin.html", "styles.css", "favicon.ico", "pixel-avatar.svg"];
 
 async function copyStaticAssets() {
   await mkdir(publicDir, { recursive: true });

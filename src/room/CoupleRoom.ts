@@ -17,6 +17,7 @@ import type {
   AdminPageData,
   DashboardSnapshot,
   HealthCheckData,
+  ProfilePageData,
   RecordsPageData,
   ShopPageData,
   UserId,
@@ -110,6 +111,15 @@ export class CoupleRoom {
         }
 
         return jsonOk(this.buildRecordsPageData());
+      }
+
+      if (url.pathname === "/internal/profile") {
+        if (request.method !== "GET") {
+          return methodNotAllowed(["GET"]);
+        }
+
+        const userId = assertUserId(url.searchParams.get("user"));
+        return jsonOk(this.buildProfilePageData(userId));
       }
 
       if (url.pathname === "/internal/health") {
@@ -274,6 +284,31 @@ export class CoupleRoom {
             );
             this.broadcastSnapshot();
           },
+          pokeUser: (actingUserId, targetUserId) => {
+            if (actingUserId === targetUserId) {
+              throw new ValidationError("INVALID_POKE_TARGET", "不能戳自己。");
+            }
+
+            const onlineStatus = this.connectionManager.getOnlineStatus();
+            const targetOnline = onlineStatus[targetUserId];
+
+            if (targetOnline) {
+              this.connectionManager.sendToUser(
+                targetUserId,
+                createNoticeMessage(`${actingUserId} 给你发来一个心动提醒。`, "info"),
+              );
+              this.connectionManager.sendToUser(
+                actingUserId,
+                createNoticeMessage(`已把心动提醒送到 ${targetUserId}。`, "success"),
+              );
+              return;
+            }
+
+            this.connectionManager.sendToUser(
+              actingUserId,
+              createNoticeMessage(`${targetUserId} 还没上线，先帮你留个小心动。`, "info"),
+            );
+          },
           submitGuessNumber: (actingUserId, value) => {
             const result = this.gameEngine.submitChoice(actingUserId, value);
 
@@ -377,6 +412,21 @@ export class CoupleRoom {
       serverTime: nowIso(),
       shopItems: this.shopService.listAllItems(),
       users,
+    };
+  }
+
+  private buildProfilePageData(userId: UserId): ProfilePageData {
+    const onlineStatus = this.connectionManager.getOnlineStatus();
+    const user = this.userService.listUsers(onlineStatus).find((item) => item.id === userId);
+
+    if (!user) {
+      throw new NotFoundError("USER_NOT_FOUND", "用户不存在。");
+    }
+
+    return {
+      giftCards: this.recordService.listGiftCardsByUser(userId),
+      serverTime: nowIso(),
+      user,
     };
   }
 
