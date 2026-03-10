@@ -1,10 +1,11 @@
 export type UserId = "yzy" | "wh";
 export type UserRole = "admin" | "player";
 export type RoomId = "couple-home";
-export type GameType = "rps" | "telepathy" | "guess-number";
+export type GameType = "rps" | "telepathy" | "guess-number" | "charades";
 export type RpsChoice = "rock" | "paper" | "scissors";
 export type RoundStatus = "idle" | "collecting" | "resolved";
 export type RoundChoiceValue = string | number;
+export type CharadesDifficulty = "easy" | "medium" | "hard";
 
 export type ScoreBoard = Record<UserId, number>;
 export type OnlineStatus = Record<UserId, boolean>;
@@ -37,6 +38,12 @@ export interface TelepathyPrompt {
   id: string;
   options: TelepathyOption[];
   text: string;
+}
+
+export interface CharadesWordEntry {
+  category: string;
+  difficulty: CharadesDifficulty;
+  word: string;
 }
 
 export interface GameCatalogItem {
@@ -96,6 +103,11 @@ export interface PersistedRoundState {
   min: number | null;
   max: number | null;
   target: number | null;
+  describerId: UserId | null;
+  guesserId: UserId | null;
+  secretWord: string | null;
+  secretCategory: string | null;
+  secretDifficulty: CharadesDifficulty | null;
 }
 
 export interface RoundSnapshot {
@@ -113,6 +125,11 @@ export interface RoundSnapshot {
   min: number | null;
   max: number | null;
   target: number | null;
+  describerId: UserId | null;
+  guesserId: UserId | null;
+  secretWord: string | null;
+  secretCategory: string | null;
+  secretDifficulty: CharadesDifficulty | null;
 }
 
 export interface DashboardSnapshot {
@@ -161,6 +178,8 @@ export interface AdminPageData {
 
 export interface ProfilePageData {
   giftCards: GiftCard[];
+  recentGames: GameRecord[];
+  recentRedemptions: RedemptionRecord[];
   serverTime: string;
   user: UserProfile;
 }

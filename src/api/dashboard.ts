@@ -1,5 +1,6 @@
 import type { AppContext } from "../app-context";
 import { methodNotAllowed } from "../shared/response";
+import { assertUserId } from "../shared/utils";
 import { buildRoomRequest, getRoom } from "./room-proxy";
 
 export async function handleDashboardRequest(request: Request, context: AppContext): Promise<Response> {
@@ -7,5 +8,7 @@ export async function handleDashboardRequest(request: Request, context: AppConte
     return methodNotAllowed(["GET"]);
   }
 
-  return getRoom(context).fetch(buildRoomRequest("/internal/dashboard"));
+  const url = new URL(request.url);
+  const userId = assertUserId(url.searchParams.get("user"));
+  return getRoom(context).fetch(buildRoomRequest(`/internal/dashboard?user=${userId}`));
 }

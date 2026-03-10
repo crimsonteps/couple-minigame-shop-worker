@@ -28,6 +28,7 @@ export const TELEPATHY_MATCH_POINTS = 5;
 export const TELEPATHY_PARTICIPATION_POINTS = 2;
 export const GUESS_NUMBER_WIN_POINTS = 7;
 export const GUESS_NUMBER_DRAW_POINTS = 3;
+export const CHARADES_SUCCESS_POINTS = 8;
 export const DEFAULT_RECENT_LIMIT = 8;
 export const DEFAULT_GUESS_RANGE = {
   max: 20,
@@ -56,6 +57,13 @@ export const GAME_CATALOG: GameCatalogItem[] = [
     subtitle: `更近 +${GUESS_NUMBER_WIN_POINTS}，同近 +${GUESS_NUMBER_DRAW_POINTS}`,
     type: "guess-number",
   },
+  {
+    description: "系统发一个词，一人描述，另一人来猜。",
+    emoji: "🎭",
+    label: "你比我猜",
+    subtitle: `猜中双方各 +${CHARADES_SUCCESS_POINTS}`,
+    type: "charades",
+  },
 ];
 
 export const RPS_OPTIONS = [
@@ -78,6 +86,11 @@ export const INITIAL_ROUND_STATE: PersistedRoundState = {
   summary: "先选一个游戏。",
   target: null,
   winnerId: null,
+  describerId: null,
+  guesserId: null,
+  secretWord: null,
+  secretCategory: null,
+  secretDifficulty: null,
 };
 
 export const TELEPATHY_PROMPTS: TelepathyPrompt[] = [

@@ -4,6 +4,9 @@ import { assertGameType, assertInteger, assertRpsChoice, assertUserId } from "..
 import type { UserId } from "../shared/types";
 
 export interface ProtocolRoomActions {
+  forceEndGame(userId: UserId): void;
+  submitCharadesGuess(userId: UserId, guess: string): void;
+  submitCharadesReady(userId: UserId): void;
   pokeUser(userId: UserId, targetUserId: UserId): void;
   startGame(userId: UserId, gameType: ReturnType<typeof assertGameType>): void;
   submitGuessNumber(userId: UserId, value: number): void;
@@ -51,6 +54,10 @@ export function parseClientMessage(rawMessage: string | ArrayBuffer | ArrayBuffe
     };
   }
 
+  if (payload.type === "game:force-end") {
+    return { type: "game:force-end" };
+  }
+
   if (payload.type === "rps:choice") {
     return {
       choice: assertRpsChoice(payload.choice),
@@ -78,6 +85,23 @@ export function parseClientMessage(rawMessage: string | ArrayBuffer | ArrayBuffe
     };
   }
 
+  if (payload.type === "charades:ready") {
+    return { type: "charades:ready" };
+  }
+
+  if (payload.type === "charades:guess") {
+    const guess = String(payload.guess ?? "").trim();
+
+    if (!guess) {
+      throw new ValidationError("INVALID_CHARADES_GUESS", "你比我猜必须提交一个词。");
+    }
+
+    return {
+      guess,
+      type: "charades:guess",
+    };
+  }
+
   throw new ValidationError("UNKNOWN_MESSAGE_TYPE", "未知的协议消息类型。");
 }
 
@@ -98,6 +122,9 @@ export function handleProtocolMessage(
     case "game:start":
       actions.startGame(userId, message.gameType);
       return;
+    case "game:force-end":
+      actions.forceEndGame(userId);
+      return;
     case "rps:choice":
       actions.submitRpsChoice(userId, message.choice);
       return;
@@ -106,6 +133,12 @@ export function handleProtocolMessage(
       return;
     case "guess-number:submit":
       actions.submitGuessNumber(userId, message.value);
+      return;
+    case "charades:ready":
+      actions.submitCharadesReady(userId);
+      return;
+    case "charades:guess":
+      actions.submitCharadesGuess(userId, message.guess);
       return;
   }
 }

@@ -75,7 +75,7 @@ export function assertAdminUserId(value: unknown): UserId {
 }
 
 export function isGameType(value: unknown): value is GameType {
-  return value === "rps" || value === "telepathy" || value === "guess-number";
+  return value === "rps" || value === "telepathy" || value === "guess-number" || value === "charades";
 }
 
 export function assertGameType(value: unknown): GameType {
@@ -122,12 +122,17 @@ export function cloneRoundState(round: PersistedRoundState): PersistedRoundState
   return {
     choices: { ...INITIAL_ROUND_STATE.choices, ...(round.choices ?? {}) },
     completedAt: round.completedAt ?? INITIAL_ROUND_STATE.completedAt,
+    describerId: round.describerId ?? INITIAL_ROUND_STATE.describerId,
     gameType: round.gameType ?? INITIAL_ROUND_STATE.gameType,
+    guesserId: round.guesserId ?? INITIAL_ROUND_STATE.guesserId,
     max: round.max ?? INITIAL_ROUND_STATE.max,
     min: round.min ?? INITIAL_ROUND_STATE.min,
     options: safeOptions.map((option) => ({ ...option })),
     promptText: round.promptText ?? INITIAL_ROUND_STATE.promptText,
     roundId: round.roundId ?? INITIAL_ROUND_STATE.roundId,
+    secretCategory: round.secretCategory ?? INITIAL_ROUND_STATE.secretCategory,
+    secretDifficulty: round.secretDifficulty ?? INITIAL_ROUND_STATE.secretDifficulty,
+    secretWord: round.secretWord ?? INITIAL_ROUND_STATE.secretWord,
     startedAt: round.startedAt ?? INITIAL_ROUND_STATE.startedAt,
     status: round.status ?? INITIAL_ROUND_STATE.status,
     summary: round.summary ?? INITIAL_ROUND_STATE.summary,
@@ -136,9 +141,10 @@ export function cloneRoundState(round: PersistedRoundState): PersistedRoundState
   };
 }
 
-export function toRoundSnapshot(round: PersistedRoundState): RoundSnapshot {
+export function toRoundSnapshot(round: PersistedRoundState, viewerId?: UserId): RoundSnapshot {
   const choicesSubmitted = Object.keys(round.choices).filter(isUserId);
   const revealedChoices: Partial<Record<UserId, string>> = {};
+  const canSeeSecret = Boolean(viewerId && round.describerId === viewerId);
 
   if (round.status === "resolved") {
     for (const userId of choicesSubmitted) {
@@ -155,13 +161,18 @@ export function toRoundSnapshot(round: PersistedRoundState): RoundSnapshot {
   return {
     choicesSubmitted,
     completedAt: round.completedAt,
+    describerId: round.describerId,
     gameType: round.gameType,
+    guesserId: round.guesserId,
     max: round.max,
     min: round.min,
     options: round.options.map((option) => ({ ...option })),
     promptText: round.promptText,
     revealedChoices,
     roundId: round.roundId,
+    secretCategory: canSeeSecret || round.status === "resolved" ? round.secretCategory : null,
+    secretDifficulty: canSeeSecret || round.status === "resolved" ? round.secretDifficulty : null,
+    secretWord: canSeeSecret || round.status === "resolved" ? round.secretWord : null,
     startedAt: round.startedAt,
     status: round.status,
     summary: round.summary,
@@ -224,5 +235,13 @@ export function formatChoiceForDisplay(
     return options.find((option) => option.id === rawChoice)?.label ?? String(rawChoice);
   }
 
+  if (gameType === "charades") {
+    return String(rawChoice) === "__ready__" ? "描述就位" : String(rawChoice);
+  }
+
   return String(rawChoice);
+}
+
+export function normalizeGuessText(value: string): string {
+  return value.trim().toLowerCase().replace(/\s+/g, "");
 }

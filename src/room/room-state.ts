@@ -39,8 +39,13 @@ export class RoomState {
     const nextRound = cloneRoundState(round);
     nextRound.choices[userId] = choice;
     const totalChoices = Object.keys(nextRound.choices).length;
-    nextRound.summary =
-      totalChoices === 1 ? "已经收到 1/2 份答案，等另一位提交。" : "双方都已提交，马上揭晓结果。";
+
+    if (round.gameType === "charades") {
+      nextRound.summary = totalChoices === 1 ? "描述的人已经看词，轮到另一位来猜。" : "猜词已提交，马上揭晓结果。";
+      return nextRound;
+    }
+
+    nextRound.summary = totalChoices === 1 ? "已经收到 1/2 份答案，等另一位提交。" : "双方都已提交，马上揭晓结果。";
 
     return nextRound;
   }

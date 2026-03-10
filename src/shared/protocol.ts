@@ -4,9 +4,12 @@ export const CLIENT_MESSAGE_TYPES = [
   "dashboard:sync",
   "user:poke",
   "game:start",
+  "game:force-end",
   "rps:choice",
   "telepathy:choice",
   "guess-number:submit",
+  "charades:ready",
+  "charades:guess",
 ] as const;
 export const SERVER_MESSAGE_TYPES = ["snapshot", "notice", "error"] as const;
 
@@ -14,9 +17,12 @@ export type ClientMessage =
   | { type: "dashboard:sync" }
   | { type: "user:poke"; targetUserId: UserId }
   | { type: "game:start"; gameType: GameType }
+  | { type: "game:force-end" }
   | { type: "rps:choice"; choice: RpsChoice }
   | { type: "telepathy:choice"; optionId: string }
-  | { type: "guess-number:submit"; value: number };
+  | { type: "guess-number:submit"; value: number }
+  | { type: "charades:ready" }
+  | { type: "charades:guess"; guess: string };
 
 export type NoticeLevel = "info" | "success" | "warning";
 

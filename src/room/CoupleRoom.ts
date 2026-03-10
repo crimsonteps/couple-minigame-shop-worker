@@ -66,7 +66,8 @@ export class CoupleRoom {
           return methodNotAllowed(["GET"]);
         }
 
-        return jsonOk(this.buildDashboardSnapshot());
+        const userId = assertUserId(url.searchParams.get("user"));
+        return jsonOk(this.buildDashboardSnapshot(userId));
       }
 
       if (url.pathname === "/internal/shop") {
@@ -91,12 +92,12 @@ export class CoupleRoom {
         }
 
         const redeemed = this.shopService.redeem(userId, itemId);
-        const snapshot = this.buildDashboardSnapshot();
+        const snapshot = this.buildDashboardSnapshot(userId);
 
         this.connectionManager.broadcast(
           createNoticeMessage(`${userId} 兑换了 ${redeemed.redemption.itemName}，扣除了 ${redeemed.redemption.cost} 分。`, "success"),
         );
-        this.broadcastSnapshot(snapshot);
+        this.broadcastSnapshot();
 
         return jsonOk({
           item: redeemed.item,
@@ -284,6 +285,11 @@ export class CoupleRoom {
             );
             this.broadcastSnapshot();
           },
+          forceEndGame: (actingUserId) => {
+            const round = this.gameEngine.forceEndRound(actingUserId);
+            this.connectionManager.broadcast(createNoticeMessage(round.summary, "warning"));
+            this.broadcastSnapshot();
+          },
           pokeUser: (actingUserId, targetUserId) => {
             if (actingUserId === targetUserId) {
               throw new ValidationError("INVALID_POKE_TARGET", "不能戳自己。");
@@ -314,6 +320,27 @@ export class CoupleRoom {
 
             if (result.resolved) {
               this.connectionManager.broadcast(createNoticeMessage(result.round.summary, "success"));
+            }
+
+            this.broadcastSnapshot();
+          },
+          submitCharadesGuess: (actingUserId, guess) => {
+            const result = this.gameEngine.submitChoice(actingUserId, guess);
+
+            if (result.resolved) {
+              this.connectionManager.broadcast(createNoticeMessage(result.round.summary, "success"));
+            }
+
+            this.broadcastSnapshot();
+          },
+          submitCharadesReady: (actingUserId) => {
+            const result = this.gameEngine.submitChoice(actingUserId, "__ready__");
+
+            if (!result.resolved) {
+              this.connectionManager.sendToUser(
+                actingUserId,
+                createNoticeMessage("可以开始描述了，另一位已经能输入答案。", "success"),
+              );
             }
 
             this.broadcastSnapshot();
@@ -358,11 +385,11 @@ export class CoupleRoom {
     this.broadcastSnapshot();
   }
 
-  private buildDashboardSnapshot(): DashboardSnapshot {
+  private buildDashboardSnapshot(viewerId: UserId): DashboardSnapshot {
     const onlineStatus = this.connectionManager.getOnlineStatus();
 
     return {
-      currentRound: toRoundSnapshot(this.roomState.getCurrentRound()),
+      currentRound: toRoundSnapshot(this.roomState.getCurrentRound(), viewerId),
       online: onlineStatus,
       recentGames: this.recordService.listRecentGames(DEFAULT_RECENT_LIMIT),
       recentRedemptions: this.recordService.listRecentRedemptions(DEFAULT_RECENT_LIMIT),
@@ -375,7 +402,7 @@ export class CoupleRoom {
   }
 
   private buildShopPageData(): ShopPageData {
-    const snapshot = this.buildDashboardSnapshot();
+    const snapshot = this.buildDashboardSnapshot(FIXED_USER_IDS[0]);
 
     return {
       recentRedemptions: snapshot.recentRedemptions,
@@ -387,7 +414,7 @@ export class CoupleRoom {
   }
 
   private buildRecordsPageData(): RecordsPageData {
-    const snapshot = this.buildDashboardSnapshot();
+    const snapshot = this.buildDashboardSnapshot(FIXED_USER_IDS[0]);
 
     return {
       recentGames: snapshot.recentGames,
@@ -425,22 +452,22 @@ export class CoupleRoom {
 
     return {
       giftCards: this.recordService.listGiftCardsByUser(userId),
+      recentGames: this.recordService.listRecentGames(DEFAULT_RECENT_LIMIT),
+      recentRedemptions: this.recordService.listRecentRedemptions(DEFAULT_RECENT_LIMIT),
       serverTime: nowIso(),
       user,
     };
   }
 
-  private broadcastSnapshot(snapshot = this.buildDashboardSnapshot()): void {
-    const message: ServerMessage = {
-      payload: snapshot,
-      type: "snapshot",
-    };
-    this.connectionManager.broadcast(message);
+  private broadcastSnapshot(): void {
+    for (const userId of FIXED_USER_IDS) {
+      this.sendSnapshotToUser(userId);
+    }
   }
 
   private sendSnapshotToUser(userId: UserId): void {
     const message: ServerMessage = {
-      payload: this.buildDashboardSnapshot(),
+      payload: this.buildDashboardSnapshot(userId),
       type: "snapshot",
     };
 

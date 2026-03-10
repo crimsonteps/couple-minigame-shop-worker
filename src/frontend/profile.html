@@ -29,11 +29,9 @@
           <h1>我的礼物库</h1>
         </div>
         <nav class="nav-strip">
-          <a data-page-link href="/index.html">首页</a>
+          <a data-page-link href="/games.html">游戏</a>
           <a data-page-link href="/shop.html">商城</a>
-          <a data-page-link href="/records.html">记录</a>
           <a data-page-link href="/profile.html">我的</a>
-          <a data-page-link data-admin-only href="/admin.html" hidden>管理</a>
         </nav>
         <div class="identity-panel">
           <span class="pill soft identity-avatar" data-current-user-display></span>
@@ -69,6 +67,38 @@
             </div>
           </div>
           <div id="gift-card-grid" class="gift-card-grid"></div>
+        </section>
+
+        <section id="records" class="dual-grid profile-records-grid">
+          <div class="card">
+            <div class="section-head compact">
+              <div>
+                <p class="eyebrow">游戏记录</p>
+                <h3>对局记录</h3>
+              </div>
+            </div>
+            <ul id="profile-games-list" class="timeline-list"></ul>
+          </div>
+          <div class="card">
+            <div class="section-head compact">
+              <div>
+                <p class="eyebrow">兑换记录</p>
+                <h3>礼物流水</h3>
+              </div>
+            </div>
+            <ul id="profile-redemptions-list" class="timeline-list"></ul>
+          </div>
+        </section>
+
+        <section id="profile-admin-card" class="card" hidden>
+          <div class="section-head compact">
+            <div>
+              <p class="eyebrow">后台</p>
+              <h3>管理员入口</h3>
+            </div>
+            <a class="primary-button link-button" data-profile-admin-link href="/admin.html">进入后台</a>
+          </div>
+          <p class="round-summary">在这里改积分、改礼物和管理商品。</p>
         </section>
       </main>
     </div>

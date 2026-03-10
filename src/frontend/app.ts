@@ -34,11 +34,19 @@ const USER_STORAGE_KEY = "couple-home.current-user";
 const GAME_STORAGE_KEY = "couple-home.selected-game";
 const THEME_STORAGE_KEY = "couple-home.theme";
 const RECONNECT_DELAY_MS = 3000;
-const page = (document.body.dataset.page ?? "dashboard") as "choose" | "dashboard" | "shop" | "records" | "profile" | "admin";
+const page = (document.body.dataset.page ?? "dashboard") as
+  | "choose"
+  | "dashboard"
+  | "games"
+  | "shop"
+  | "records"
+  | "profile"
+  | "admin";
 type ThemeMode = "light" | "dark";
 
 interface ClientState {
   adminData: AdminPageData | null;
+  charadesGuessDraft: string;
   currentUser: UserId;
   dashboard: DashboardSnapshot | null;
   guessNumberDraft: string;
@@ -57,6 +65,7 @@ interface ClientState {
 
 const state: ClientState = {
   adminData: null,
+  charadesGuessDraft: "",
   currentUser: loadStoredUser(),
   dashboard: null,
   guessNumberDraft: "",
@@ -96,6 +105,11 @@ async function init(): Promise<void> {
   localStorage.setItem(USER_STORAGE_KEY, userFromUrl);
   syncNavLinks();
   updateCurrentUserDisplay();
+
+  if (page === "dashboard") {
+    redirectToGamesPage(state.currentUser);
+    return;
+  }
 
   if (page === "admin" && !isCurrentUserAdmin()) {
     redirectToHomePage(state.currentUser);
@@ -155,7 +169,7 @@ function bindCommonEvents(): void {
 
     const nextGameType = button.dataset.gameSelect;
 
-    if (nextGameType !== "rps" && nextGameType !== "telepathy" && nextGameType !== "guess-number") {
+    if (nextGameType !== "rps" && nextGameType !== "telepathy" && nextGameType !== "guess-number" && nextGameType !== "charades") {
       return;
     }
 
@@ -177,7 +191,13 @@ function bindCommonEvents(): void {
     });
   });
 
-  document.getElementById("score-grid")?.addEventListener("click", (event) => {
+  document.getElementById("force-end-game-btn")?.addEventListener("click", () => {
+    sendSocketMessage({
+      type: "game:force-end",
+    });
+  });
+
+  document.addEventListener("click", (event) => {
     const target = event.target;
 
     if (!(target instanceof HTMLElement)) {
@@ -247,23 +267,67 @@ function bindCommonEvents(): void {
         optionId,
         type: "telepathy:choice",
       });
+      return;
+    }
+
+    const charadesReadyButton = target.closest<HTMLButtonElement>("[data-charades-ready]");
+
+    if (charadesReadyButton) {
+      sendSocketMessage({
+        type: "charades:ready",
+      });
     }
   });
 
   document.getElementById("game-panel")?.addEventListener("input", (event) => {
     const target = event.target;
 
-    if (!(target instanceof HTMLInputElement) || !target.hasAttribute("data-guess-number-input")) {
+    if (!(target instanceof HTMLInputElement)) {
       return;
     }
 
-    state.guessNumberDraft = target.value;
+    if (target.hasAttribute("data-guess-number-input")) {
+      state.guessNumberDraft = target.value;
+      return;
+    }
+
+    if (target.hasAttribute("data-charades-input")) {
+      state.charadesGuessDraft = target.value;
+    }
   });
 
   document.getElementById("game-panel")?.addEventListener("submit", (event) => {
     const target = event.target;
 
-    if (!(target instanceof HTMLFormElement) || !target.hasAttribute("data-guess-number-form")) {
+    if (!(target instanceof HTMLFormElement)) {
+      return;
+    }
+
+    if (target.hasAttribute("data-charades-form")) {
+      event.preventDefault();
+
+      const input = target.querySelector<HTMLInputElement>("[data-charades-input]");
+
+      if (!input) {
+        return;
+      }
+
+      const guess = input.value.trim();
+
+      if (!guess) {
+        showToast("请输入你猜到的词。", "warning");
+        return;
+      }
+
+      state.charadesGuessDraft = guess;
+      sendSocketMessage({
+        guess,
+        type: "charades:guess",
+      });
+      return;
+    }
+
+    if (!target.hasAttribute("data-guess-number-form")) {
       return;
     }
 
@@ -414,7 +478,13 @@ async function loadInitialData(): Promise<void> {
   }
 
   if (page === "dashboard") {
-    state.dashboard = await apiRequest<DashboardSnapshot>("/api/dashboard");
+    state.dashboard = await apiRequest<DashboardSnapshot>(`/api/dashboard?user=${state.currentUser}`);
+    syncGameSelectionFromSnapshot(state.dashboard.currentRound);
+    return;
+  }
+
+  if (page === "games") {
+    state.dashboard = await apiRequest<DashboardSnapshot>(`/api/dashboard?user=${state.currentUser}`);
     syncGameSelectionFromSnapshot(state.dashboard.currentRound);
     return;
   }
@@ -509,13 +579,21 @@ function handleSocketMessage(rawMessage: string): void {
       state.guessNumberDraft = "";
     }
 
+    if (
+      currentRound.gameType !== "charades" ||
+      currentRound.status !== "collecting" ||
+      currentRound.choicesSubmitted.includes(state.currentUser)
+    ) {
+      state.charadesGuessDraft = "";
+    }
+
     syncGameSelectionFromSnapshot(currentRound);
     render();
     return;
   }
 
   if (message.type === "notice") {
-    if (page === "dashboard" && message.payload.text.includes("心动提醒")) {
+    if ((page === "dashboard" || page === "games") && message.payload.text.includes("心动提醒")) {
       triggerPokeVisual(state.currentUser);
     }
     showToast(message.payload.text, message.payload.level === "info" ? undefined : message.payload.level);
@@ -545,6 +623,11 @@ function render(): void {
 
   if (page === "dashboard") {
     renderDashboardPage();
+    return;
+  }
+
+  if (page === "games") {
+    renderGamesPage();
     return;
   }
 
@@ -593,9 +676,15 @@ function renderDashboardPage(): void {
   updateDashboardMood(users);
   renderScoreGrid(document.getElementById("score-grid"), users);
   renderServerTime(document.getElementById("server-time"), getServerTime());
-  renderGameArea();
   renderGamesList(document.getElementById("recent-games-list"), getRecentGames());
   renderRedemptionsList(document.getElementById("recent-redemptions-list"), getRecentRedemptions());
+}
+
+function renderGamesPage(): void {
+  const users = getUsers();
+  renderScoreGrid(document.getElementById("games-score-grid"), users);
+  renderServerTime(document.getElementById("games-server-time"), getServerTime());
+  renderGameArea();
 }
 
 function renderAdminPage(): void {
@@ -908,7 +997,6 @@ function renderShopPage(): void {
     }
   }
 
-  renderRedemptionsList(document.getElementById("shop-redemptions-list"), getRecentRedemptions());
 }
 
 function renderRecordsPage(): void {
@@ -933,6 +1021,9 @@ function renderProfilePage(): void {
 
   renderProfileSummary(document.getElementById("profile-summary"));
   renderGiftCards(document.getElementById("gift-card-grid"), state.profileData?.giftCards ?? []);
+  renderGamesList(document.getElementById("profile-games-list"), state.profileData?.recentGames ?? []);
+  renderRedemptionsList(document.getElementById("profile-redemptions-list"), state.profileData?.recentRedemptions ?? []);
+  renderProfileAdminEntry(document.getElementById("profile-admin-card"));
 }
 
 function renderProfileSummary(container: HTMLElement | null): void {
@@ -999,6 +1090,14 @@ function renderGiftCards(container: HTMLElement | null, giftCards: GiftCard[]): 
       `,
     )
     .join("");
+}
+
+function renderProfileAdminEntry(container: HTMLElement | null): void {
+  if (!container) {
+    return;
+  }
+
+  container.hidden = !isCurrentUserAdmin();
 }
 
 function renderScoreGrid(container: HTMLElement | null, users: UserProfile[]): void {
@@ -1191,12 +1290,17 @@ function triggerPokeVisual(userId: UserId): void {
     window.clearTimeout(state.pokeTimer);
   }
 
-  renderScoreGrid(document.getElementById("score-grid"), getUsers());
+  renderActiveScoreGrid();
 
   state.pokeTimer = window.setTimeout(() => {
     state.pokedUserId = null;
-    renderScoreGrid(document.getElementById("score-grid"), getUsers());
+    renderActiveScoreGrid();
   }, 1800);
+}
+
+function renderActiveScoreGrid(): void {
+  const containerId = page === "games" ? "games-score-grid" : "score-grid";
+  renderScoreGrid(document.getElementById(containerId), getUsers());
 }
 
 function updateDashboardMood(users: UserProfile[]): void {
@@ -1225,6 +1329,7 @@ function renderGameArea(): void {
   const round = getCurrentRound();
   const displayedGameType = getDisplayedGameType();
   const startButton = document.getElementById("start-game-btn") as HTMLButtonElement | null;
+  const forceEndButton = document.getElementById("force-end-game-btn") as HTMLButtonElement | null;
   const title = document.getElementById("round-title");
   const summary = document.getElementById("round-summary");
   const hint = document.getElementById("choice-hint");
@@ -1282,6 +1387,10 @@ function renderGameArea(): void {
     startButton.disabled = !allOnline || round.status === "collecting";
     startButton.textContent = round.status === "collecting" ? `${gameTypeLabel(round.gameType)} 进行中` : `开始${currentCatalog.label}`;
   }
+
+  if (forceEndButton) {
+    forceEndButton.disabled = round.status !== "collecting";
+  }
 }
 
 function renderGamePanel(gameType: GameType, round: RoundSnapshot | null): string {
@@ -1292,6 +1401,8 @@ function renderGamePanel(gameType: GameType, round: RoundSnapshot | null): strin
       return renderTelepathyPanel(round);
     case "guess-number":
       return renderGuessNumberPanel(round);
+    case "charades":
+      return renderCharadesPanel(round);
   }
 }
 
@@ -1369,6 +1480,83 @@ function renderGuessNumberPanel(round: RoundSnapshot | null): string {
   `;
 }
 
+function renderCharadesPanel(round: RoundSnapshot | null): string {
+  const isCollecting = Boolean(round && round.status === "collecting");
+  const isDescriber = round?.describerId === state.currentUser;
+  const isGuesser = round?.guesserId === state.currentUser;
+  const hasSubmitted = Boolean(round?.choicesSubmitted.includes(state.currentUser));
+  const describerReady = Boolean(round?.describerId && round.choicesSubmitted.includes(round.describerId));
+  const revealText =
+    round?.status === "resolved" && round.secretWord
+      ? `答案是 ${round.secretWord}`
+      : round?.secretCategory
+        ? `${round.secretCategory} · ${round.secretDifficulty ?? "easy"}`
+        : "开始后系统会随机出词";
+
+  if (!isCollecting || !round) {
+    return `
+      <div class="charades-card">
+        <div class="charades-word-card">
+          <p class="eyebrow">新玩法</p>
+          <h3>系统发词，一人描述，一人来猜</h3>
+          <p class="charades-meta">${escapeHtml(revealText)}</p>
+        </div>
+      </div>
+    `;
+  }
+
+  if (isDescriber) {
+    return `
+      <div class="charades-card">
+        <div class="charades-word-card spotlight">
+          <p class="eyebrow">你的词</p>
+          <h3>${escapeHtml(round.secretWord ?? "--")}</h3>
+          <p class="charades-meta">${escapeHtml(revealText)}</p>
+        </div>
+        <div class="charades-tip-box">
+          <p>用别的词描述，别直接说出答案。</p>
+          <button class="primary-button" type="button" data-charades-ready ${hasSubmitted ? "disabled" : ""}>
+            ${hasSubmitted ? "已经准备好" : "我看好词了"}
+          </button>
+        </div>
+      </div>
+    `;
+  }
+
+  if (isGuesser && !describerReady) {
+    return `
+      <div class="charades-card">
+        <div class="charades-word-card">
+          <p class="eyebrow">等一下</p>
+          <h3>对方正在看词</h3>
+          <p class="charades-meta">等他准备好后，你就可以输入答案。</p>
+        </div>
+      </div>
+    `;
+  }
+
+  return `
+    <form class="charades-card" data-charades-form>
+      <div class="charades-word-card">
+        <p class="eyebrow">轮到你猜</p>
+        <h3>把你想到的词输进来</h3>
+        <p class="charades-meta">${escapeHtml(revealText)}</p>
+      </div>
+      <div class="charades-input-row">
+        <input
+          class="number-input charades-input"
+          type="text"
+          data-charades-input
+          value="${hasSubmitted ? "" : escapeHtml(state.charadesGuessDraft)}"
+          placeholder="输入你猜到的词"
+          ${hasSubmitted ? "disabled" : ""}
+        />
+        <button class="primary-button compact" type="submit" ${hasSubmitted ? "disabled" : ""}>提交答案</button>
+      </div>
+    </form>
+  `;
+}
+
 function buildHintText(gameType: GameType, round: RoundSnapshot | null, allOnline: boolean): string {
   if (!allOnline) {
     return "两个人都在线才能开始。";
@@ -1391,6 +1579,18 @@ function buildHintText(gameType: GameType, round: RoundSnapshot | null, allOnlin
 
     if (gameType === "telepathy") {
       return "选一个答案。";
+    }
+
+    if (gameType === "charades") {
+      if (round.describerId === state.currentUser) {
+        return round.choicesSubmitted.includes(state.currentUser) ? "开始描述吧，等对方来猜。" : "先看词，再点准备好。";
+      }
+
+      if (!round.describerId || !round.choicesSubmitted.includes(round.describerId)) {
+        return "对方还在看词。";
+      }
+
+      return "听描述，猜一个词。";
     }
 
     return `输入 ${round.min ?? DEFAULT_GUESS_RANGE.min}-${round.max ?? DEFAULT_GUESS_RANGE.max} 的整数。`;
@@ -1494,6 +1694,10 @@ function getRecentGames(): GameRecord[] {
     return state.dashboard.recentGames;
   }
 
+  if (state.profileData) {
+    return state.profileData.recentGames;
+  }
+
   return state.recordsData?.recentGames ?? [];
 }
 
@@ -1504,6 +1708,10 @@ function getRecentRedemptions(): RedemptionRecord[] {
 
   if (state.shopData) {
     return state.shopData.recentRedemptions;
+  }
+
+  if (state.profileData) {
+    return state.profileData.recentRedemptions;
   }
 
   return state.recordsData?.recentRedemptions ?? [];
@@ -1526,13 +1734,18 @@ function getCurrentRound(): RoundSnapshot {
     state.dashboard?.currentRound ?? {
       choicesSubmitted: [],
       completedAt: null,
+      describerId: null,
       gameType: state.selectedGameType,
+      guesserId: null,
       max: null,
       min: null,
       options: [],
       promptText: null,
       revealedChoices: {},
       roundId: 0,
+      secretCategory: null,
+      secretDifficulty: null,
+      secretWord: null,
       startedAt: null,
       status: "idle",
       summary: "先选一个游戏。",
@@ -1590,6 +1803,12 @@ function renderServerTime(container: HTMLElement | null, serverTime: string | nu
 
 function syncNavLinks(): void {
   document.querySelectorAll<HTMLAnchorElement>("[data-page-link]").forEach((link) => {
+    const url = new URL(link.getAttribute("href") ?? "/", window.location.origin);
+    url.searchParams.set("user", state.currentUser);
+    link.href = `${url.pathname}${url.search}`;
+  });
+
+  document.querySelectorAll<HTMLAnchorElement>("[data-profile-admin-link]").forEach((link) => {
     const url = new URL(link.getAttribute("href") ?? "/", window.location.origin);
     url.searchParams.set("user", state.currentUser);
     link.href = `${url.pathname}${url.search}`;
@@ -1681,7 +1900,7 @@ function loadStoredUser(): UserId {
 function loadSelectedGameType(): GameType {
   const fromStorage = localStorage.getItem(GAME_STORAGE_KEY);
 
-  if (fromStorage === "telepathy" || fromStorage === "guess-number") {
+  if (fromStorage === "telepathy" || fromStorage === "guess-number" || fromStorage === "charades") {
     return fromStorage;
   }
 
@@ -1732,7 +1951,13 @@ function redirectToChoosePage(): void {
 }
 
 function redirectToHomePage(userId: UserId): void {
-  const url = new URL("/index.html", window.location.origin);
+  const url = new URL("/games.html", window.location.origin);
+  url.searchParams.set("user", userId);
+  window.location.replace(`${url.pathname}${url.search}`);
+}
+
+function redirectToGamesPage(userId: UserId): void {
+  const url = new URL("/games.html", window.location.origin);
   url.searchParams.set("user", userId);
   window.location.replace(`${url.pathname}${url.search}`);
 }
@@ -1740,15 +1965,16 @@ function redirectToHomePage(userId: UserId): void {
 function enterWithUser(userId: UserId): void {
   state.currentUser = userId;
   localStorage.setItem(USER_STORAGE_KEY, userId);
-  const next = new URL(window.location.href).searchParams.get("next") || "/index.html";
+  const next = new URL(window.location.href).searchParams.get("next") || "/games.html";
   const nextUrl = new URL(next, window.location.origin);
 
   if (
     nextUrl.pathname === "/" ||
     nextUrl.pathname === "/choose.html" ||
+    nextUrl.pathname === "/index.html" ||
     (nextUrl.pathname === "/admin.html" && !isAdminUserId(userId))
   ) {
-    nextUrl.pathname = "/index.html";
+    nextUrl.pathname = "/games.html";
   }
 
   nextUrl.searchParams.set("user", userId);
@@ -1802,6 +2028,10 @@ function buildRecordSummary(record: GameRecord): string {
 
   if (record.winnerId) {
     return `${userLabel(record.winnerId)} 在${gameLabel}中赢了 ${record.scoreDelta[record.winnerId]} 分。`;
+  }
+
+  if (record.gameType === "charades" && record.scoreDelta[PRIMARY_USER_ID] === 0 && record.scoreDelta[SECONDARY_USER_ID] === 0) {
+    return record.summary;
   }
 
   if (record.scoreDelta[PRIMARY_USER_ID] === record.scoreDelta[SECONDARY_USER_ID]) {

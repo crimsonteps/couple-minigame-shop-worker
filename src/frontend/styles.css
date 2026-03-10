@@ -146,6 +146,13 @@ button {
   border-color: rgba(236, 157, 179, 0.42);
 }
 
+.link-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+}
+
 [data-admin-only] {
   display: none !important;
 }
@@ -210,6 +217,8 @@ body[data-is-admin="true"] [data-admin-only] {
 }
 
 body[data-page="dashboard"] .identity-panel,
+body[data-page="games"] .brand-box,
+body[data-page="games"] .identity-panel,
 body[data-page="shop"] .brand-box,
 body[data-page="shop"] .identity-panel,
 body[data-page="records"] .brand-box,
@@ -221,6 +230,7 @@ body[data-page="admin"] .identity-panel {
   display: none;
 }
 
+body[data-page="games"] .topbar,
 body[data-page="shop"] .topbar,
 body[data-page="records"] .topbar,
 body[data-page="profile"] .topbar,
@@ -761,6 +771,13 @@ body[data-page="admin"] .topbar {
   gap: 20px;
 }
 
+.game-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
 .primary-button,
 .choice-button,
 .redeem-button {
@@ -958,6 +975,14 @@ body[data-page="admin"] .topbar {
 .gift-card-grid {
   display: grid;
   gap: 16px;
+}
+
+.profile-records-grid {
+  align-items: start;
+}
+
+.profile-records-grid .card {
+  min-height: 100%;
 }
 
 .profile-panel,
@@ -1297,7 +1322,9 @@ html[data-theme="dark"] .gift-card,
 html[data-theme="dark"] .admin-card,
 html[data-theme="dark"] .choice-button,
 html[data-theme="dark"] .game-chip,
-html[data-theme="dark"] .timeline-item {
+html[data-theme="dark"] .timeline-item,
+html[data-theme="dark"] .charades-word-card,
+html[data-theme="dark"] .charades-tip-box {
   background: linear-gradient(180deg, rgba(35, 29, 32, 0.94), rgba(27, 23, 25, 0.96));
   border-color: rgba(255, 255, 255, 0.08);
 }
@@ -1629,6 +1656,7 @@ html[data-theme="dark"] .toast {
     align-items: center;
   }
 
+  body[data-page="games"] .topbar,
   body[data-page="shop"] .topbar,
   body[data-page="records"] .topbar,
   body[data-page="profile"] .topbar,
@@ -1840,7 +1868,7 @@ html[data-theme="dark"] .toast {
 }
 
 .game-selector {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
 .game-chip {
@@ -1883,6 +1911,56 @@ html[data-theme="dark"] .toast {
   border: 1px solid var(--line);
   color: var(--text);
   line-height: 1.7;
+}
+
+.game-link-card .round-summary {
+  margin: 0;
+}
+
+.charades-card {
+  display: grid;
+  gap: 16px;
+}
+
+.charades-word-card,
+.charades-tip-box {
+  padding: 20px;
+  border-radius: var(--radius-lg);
+  background: linear-gradient(135deg, rgba(255, 245, 242, 0.92), rgba(249, 241, 233, 0.9));
+  border: 1px solid var(--line);
+}
+
+.charades-word-card h3 {
+  margin: 4px 0 0;
+  font-size: clamp(1.4rem, 3vw, 2rem);
+  letter-spacing: -0.03em;
+}
+
+.charades-word-card.spotlight {
+  background:
+    radial-gradient(circle at top right, rgba(236, 157, 179, 0.18), transparent 40%),
+    linear-gradient(135deg, rgba(255, 245, 242, 0.96), rgba(249, 241, 233, 0.94));
+}
+
+.charades-meta,
+.charades-tip-box p {
+  margin: 0;
+  color: var(--text-soft);
+  line-height: 1.7;
+}
+
+.charades-tip-box {
+  display: grid;
+  gap: 12px;
+}
+
+.charades-input-row {
+  display: flex;
+  gap: 12px;
+}
+
+.charades-input {
+  flex: 1 1 auto;
 }
 
 .option-grid {
@@ -2036,9 +2114,9 @@ html[data-theme="dark"] .toast {
     bottom: max(16px, env(safe-area-inset-bottom));
     transform: translateX(-50%);
     z-index: 90;
-    width: min(calc(100% - 24px), 420px);
+    width: min(calc(100% - 24px), 360px);
     padding: 8px;
-    gap: 8px;
+    gap: 6px;
     overflow: hidden;
     border: 1px solid rgba(255, 255, 255, 0.92);
     border-radius: 999px;
@@ -2053,17 +2131,18 @@ html[data-theme="dark"] .toast {
   .nav-strip a {
     flex: 1 1 0;
     min-width: 0;
-    min-height: 58px;
-    padding: 12px 10px;
+    min-height: 54px;
+    padding: 10px 8px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
     border: 1px solid transparent;
     background: transparent;
     box-shadow: none;
-    font-size: 0.98rem;
+    font-size: 0.92rem;
     font-weight: 700;
     letter-spacing: 0.01em;
+    white-space: nowrap;
   }
 
   .nav-strip a:hover {
@@ -2089,6 +2168,11 @@ html[data-theme="dark"] .toast {
   .admin-grid,
   .admin-field-grid {
     grid-template-columns: 1fr;
+  }
+
+  .charades-input-row,
+  .number-controls {
+    flex-direction: column;
   }
 
   html[data-theme="dark"] .nav-strip {

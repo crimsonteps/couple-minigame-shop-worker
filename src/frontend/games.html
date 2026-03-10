@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Oh Kanh Mini Game</title>
+    <title>Oh Kanh Mini Game - 游戏</title>
     <link rel="icon" href="/favicon.ico" type="image/x-icon" />
     <script>
       (() => {
@@ -21,20 +21,17 @@
     </script>
     <link rel="stylesheet" href="/styles.css" />
   </head>
-  <body data-page="dashboard">
+  <body data-page="games">
     <button class="theme-toggle" type="button" data-theme-toggle></button>
     <div class="page-shell">
       <header class="topbar">
         <div class="brand-box">
-          <h1>Oh Kanh Mini Game</h1>
+          <h1>游戏厅</h1>
         </div>
         <nav class="nav-strip">
-          <a data-page-link href="/index.html">首页</a>
           <a data-page-link href="/games.html">游戏</a>
           <a data-page-link href="/shop.html">商城</a>
-          <a data-page-link href="/records.html">记录</a>
           <a data-page-link href="/profile.html">我的</a>
-          <a data-page-link data-admin-only href="/admin.html" hidden>管理</a>
         </nav>
         <div class="identity-panel">
           <span class="pill soft identity-avatar" data-current-user-display></span>
@@ -44,57 +41,44 @@
       <main class="layout-stack">
         <section class="card hero-card">
           <div class="hero-copy">
-            <h2>玩一局，攒点分</h2>
+            <h2>所有游戏都在这里</h2>
           </div>
           <div class="hero-status">
             <span id="socket-pill" class="pill connecting">正在连接</span>
-            <span class="pill subtle">默契问答</span>
-            <span class="pill subtle">猜数字</span>
+            <span id="games-server-time" class="meta-text">--</span>
           </div>
         </section>
 
         <section class="card">
           <div class="section-head">
             <div>
-              <p class="eyebrow">积分看板</p>
+              <p class="eyebrow">连线状态</p>
               <h3>双方</h3>
             </div>
-            <span id="server-time" class="meta-text">--</span>
           </div>
-          <div id="score-grid" class="score-grid"></div>
+          <div id="games-score-grid" class="score-grid"></div>
         </section>
 
-        <section class="card game-link-card">
-          <div class="section-head compact">
+        <section class="card game-card">
+          <div class="section-head">
             <div>
               <p class="eyebrow">小游戏</p>
-              <h3>去游戏厅</h3>
+              <h3>选游戏</h3>
             </div>
-            <a class="primary-button link-button" data-page-link href="/games.html">打开游戏</a>
+            <div class="game-actions">
+              <button id="start-game-btn" class="primary-button" type="button">开始游戏</button>
+              <button id="force-end-game-btn" class="danger-button" type="button">强制结束当局</button>
+            </div>
           </div>
-          <p class="round-summary">猜拳、默契问答、猜数字，还有新的你比我猜，都搬到独立页面了。</p>
+          <div id="game-selector" class="game-selector"></div>
+          <div class="round-summary-box">
+            <p id="round-title" class="round-title">等待开始</p>
+            <p id="round-summary" class="round-summary">先选一个游戏。</p>
+          </div>
+          <div id="game-panel" class="game-panel"></div>
+          <p id="choice-hint" class="hint-text">结果和积分会自动结算。</p>
         </section>
 
-        <section class="dual-grid">
-          <div class="card">
-            <div class="section-head compact">
-              <div>
-                <p class="eyebrow">最近战绩</p>
-                <h3>游戏记录</h3>
-              </div>
-            </div>
-            <ul id="recent-games-list" class="timeline-list"></ul>
-          </div>
-          <div class="card">
-            <div class="section-head compact">
-              <div>
-                <p class="eyebrow">最近兑换</p>
-                <h3>礼物记录</h3>
-              </div>
-            </div>
-            <ul id="recent-redemptions-list" class="timeline-list"></ul>
-          </div>
-        </section>
       </main>
     </div>
 

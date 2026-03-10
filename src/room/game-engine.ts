@@ -1,4 +1,5 @@
 import {
+  FIXED_USER_IDS,
   DEFAULT_GUESS_RANGE,
   FIXED_ROOM_ID,
   PRIMARY_USER_ID,
@@ -16,6 +17,8 @@ import type {
   ScoreBoard,
   UserId,
 } from "../shared/types";
+import { CHARADES_WORD_BANK } from "./games/charades-word-bank";
+import { resolveCharadesRound } from "./games/charades";
 import { resolveGuessNumberRound } from "./games/guess-number";
 import { resolveRpsRound } from "./games/rps";
 import { resolveTelepathyRound } from "./games/telepathy";
@@ -46,12 +49,17 @@ export class GameEngine {
     const baseRound: PersistedRoundState = {
       choices: {},
       completedAt: null,
+      describerId: null,
       gameType,
+      guesserId: null,
       max: null,
       min: null,
       options: [],
       promptText: null,
       roundId: currentRound.roundId + 1,
+      secretCategory: null,
+      secretDifficulty: null,
+      secretWord: null,
       startedAt: nowIso(),
       status: "collecting",
       summary: "新一轮小游戏开始了，等你们一起提交答案。",
@@ -76,6 +84,18 @@ export class GameEngine {
         baseRound.target = this.randomGuessTarget();
         baseRound.summary = `系统已经藏好了一个 ${DEFAULT_GUESS_RANGE.min}-${DEFAULT_GUESS_RANGE.max} 的数字，谁更接近谁得分。`;
         break;
+      case "charades": {
+        const describerId = this.pickRandomDescriber();
+        const guesserId = describerId === PRIMARY_USER_ID ? SECONDARY_USER_ID : PRIMARY_USER_ID;
+        const word = pickRandom(CHARADES_WORD_BANK);
+        baseRound.describerId = describerId;
+        baseRound.guesserId = guesserId;
+        baseRound.secretWord = word.word;
+        baseRound.secretCategory = word.category;
+        baseRound.secretDifficulty = word.difficulty;
+        baseRound.summary = `${describerId} 先看词描述，${guesserId} 来猜。`;
+        break;
+      }
     }
 
     return this.roomState.saveRound(baseRound);
@@ -83,7 +103,7 @@ export class GameEngine {
 
   submitChoice(userId: UserId, rawChoice: RoundChoiceValue): SubmitChoiceResult {
     const currentRound = this.roomState.getCurrentRound();
-    const normalizedChoice = this.normalizeChoice(currentRound, rawChoice);
+    const normalizedChoice = this.normalizeChoice(currentRound, userId, rawChoice);
     const updatedRound = this.roomState.applyChoice(currentRound, userId, normalizedChoice);
 
     if (!this.roomState.hasAllChoices(updatedRound)) {
@@ -127,7 +147,17 @@ export class GameEngine {
     };
   }
 
-  private normalizeChoice(round: PersistedRoundState, rawChoice: RoundChoiceValue): RoundChoiceValue {
+  forceEndRound(userId: UserId): PersistedRoundState {
+    const currentRound = this.roomState.getCurrentRound();
+
+    if (currentRound.status !== "collecting") {
+      throw new ConflictError("ROUND_NOT_READY", "当前没有进行中的小游戏回合。");
+    }
+
+    return this.roomState.markResolved(currentRound, null, `${userId} 强制结束了本局，本局不计分。`, nowIso());
+  }
+
+  private normalizeChoice(round: PersistedRoundState, userId: UserId, rawChoice: RoundChoiceValue): RoundChoiceValue {
     if (round.gameType === "rps") {
       return assertRpsChoice(rawChoice);
     }
@@ -140,6 +170,32 @@ export class GameEngine {
       }
 
       return optionId;
+    }
+
+    if (round.gameType === "charades") {
+      const value = String(rawChoice ?? "").trim();
+
+      if (!round.describerId || !round.guesserId || !round.secretWord) {
+        throw new ConflictError("INVALID_ROUND", "当前你比我猜回合没有正确初始化。");
+      }
+
+      if (userId === round.describerId) {
+        if (value !== "__ready__") {
+          throw new ValidationError("INVALID_CHARADES_READY", "描述的人需要先确认自己已经看到词。");
+        }
+
+        return value;
+      }
+
+      if (round.choices[round.describerId] === undefined) {
+        throw new ConflictError("CHARADES_NOT_READY", "描述的人还没准备好。");
+      }
+
+      if (!value) {
+        throw new ValidationError("INVALID_CHARADES_GUESS", "请输入你猜到的词。");
+      }
+
+      return value;
     }
 
     const guess = typeof rawChoice === "number" ? rawChoice : Number(rawChoice);
@@ -193,10 +249,25 @@ export class GameEngine {
           min: round.min,
           target: round.target,
         });
+      case "charades":
+        if (!round.describerId || !round.guesserId || !round.secretWord) {
+          throw new ConflictError("INVALID_ROUND", "当前你比我猜回合没有正确初始化。");
+        }
+
+        return resolveCharadesRound({
+          describerId: round.describerId,
+          guess: String(round.choices[round.guesserId] ?? ""),
+          guesserId: round.guesserId,
+          secretWord: round.secretWord,
+        });
     }
   }
 
   private randomGuessTarget(): number {
     return Math.floor(Math.random() * (DEFAULT_GUESS_RANGE.max - DEFAULT_GUESS_RANGE.min + 1)) + DEFAULT_GUESS_RANGE.min;
+  }
+
+  private pickRandomDescriber(): UserId {
+    return pickRandom(FIXED_USER_IDS) as UserId;
   }
 }

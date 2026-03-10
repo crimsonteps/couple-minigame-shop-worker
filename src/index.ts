@@ -61,6 +61,19 @@ export async function handleAppRequest(request: Request, context: AppContext): P
   try {
     const url = new URL(request.url);
 
+    if (url.pathname === "/index.html") {
+      const redirectUrl = new URL(request.url);
+      redirectUrl.pathname = "/games.html";
+      return Response.redirect(redirectUrl, 302);
+    }
+
+    if (url.pathname === "/records.html") {
+      const redirectUrl = new URL(request.url);
+      redirectUrl.pathname = "/profile.html";
+      redirectUrl.hash = "records";
+      return Response.redirect(redirectUrl, 302);
+    }
+
     if (url.pathname === "/api/dashboard") {
       return handleDashboardRequest(request, context);
     }
