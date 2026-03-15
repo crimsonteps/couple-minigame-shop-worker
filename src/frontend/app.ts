@@ -38,11 +38,22 @@ const page = (document.body.dataset.page ?? "dashboard") as
   | "choose"
   | "dashboard"
   | "games"
+  | "rps"
+  | "telepathy"
+  | "guess-number"
+  | "charades"
   | "shop"
   | "records"
   | "profile"
   | "admin";
 type ThemeMode = "light" | "dark";
+
+const GAME_PAGE_PATHS: Record<GameType, string> = {
+  charades: "/charades.html",
+  "guess-number": "/guess-number.html",
+  rps: "/rps.html",
+  telepathy: "/telepathy.html",
+};
 
 interface ClientState {
   adminData: AdminPageData | null;
@@ -50,8 +61,6 @@ interface ClientState {
   currentUser: UserId;
   dashboard: DashboardSnapshot | null;
   guessNumberDraft: string;
-  pokedUserId: UserId | null;
-  pokeTimer: number | null;
   profileData: ProfilePageData | null;
   recordsData: RecordsPageData | null;
   reconnectTimer: number | null;
@@ -69,8 +78,6 @@ const state: ClientState = {
   currentUser: loadStoredUser(),
   dashboard: null,
   guessNumberDraft: "",
-  pokedUserId: null,
-  pokeTimer: null,
   profileData: null,
   recordsData: null,
   reconnectTimer: null,
@@ -122,6 +129,11 @@ async function init(): Promise<void> {
 
   try {
     await loadInitialData();
+
+    if (ensureCorrectGameRoute()) {
+      return;
+    }
+
     render();
   } catch (error) {
     showToast(normalizeError(error), "warning");
@@ -195,40 +207,6 @@ function bindCommonEvents(): void {
     sendSocketMessage({
       type: "game:force-end",
     });
-  });
-
-  document.addEventListener("click", (event) => {
-    const target = event.target;
-
-    if (!(target instanceof HTMLElement)) {
-      return;
-    }
-
-    const button = target.closest<HTMLButtonElement>("[data-poke-user]");
-
-    if (!button) {
-      return;
-    }
-
-    const targetUserId = normalizeUserId(button.dataset.pokeUser);
-
-    if (!targetUserId || targetUserId === state.currentUser) {
-      return;
-    }
-
-    triggerPokeVisual(targetUserId);
-
-    const targetUser = getUsers().find((user) => user.id === targetUserId);
-
-    if (targetUser?.online) {
-      sendSocketMessage({
-        targetUserId,
-        type: "user:poke",
-      });
-      return;
-    }
-
-    showToast(`${targetUserId} 还没到，先帮你轻轻催一下。`);
   });
 
   document.getElementById("game-panel")?.addEventListener("click", (event) => {
@@ -485,7 +463,11 @@ async function loadInitialData(): Promise<void> {
 
   if (page === "games") {
     state.dashboard = await apiRequest<DashboardSnapshot>(`/api/dashboard?user=${state.currentUser}`);
-    syncGameSelectionFromSnapshot(state.dashboard.currentRound);
+    return;
+  }
+
+  if (isGameDetailPage()) {
+    state.dashboard = await apiRequest<DashboardSnapshot>(`/api/dashboard?user=${state.currentUser}`);
     return;
   }
 
@@ -587,15 +569,15 @@ function handleSocketMessage(rawMessage: string): void {
       state.charadesGuessDraft = "";
     }
 
-    syncGameSelectionFromSnapshot(currentRound);
+    if (ensureCorrectGameRoute(currentRound)) {
+      return;
+    }
+
     render();
     return;
   }
 
   if (message.type === "notice") {
-    if ((page === "dashboard" || page === "games") && message.payload.text.includes("心动提醒")) {
-      triggerPokeVisual(state.currentUser);
-    }
     showToast(message.payload.text, message.payload.level === "info" ? undefined : message.payload.level);
     return;
   }
@@ -628,6 +610,11 @@ function render(): void {
 
   if (page === "games") {
     renderGamesPage();
+    return;
+  }
+
+  if (isGameDetailPage()) {
+    renderGameDetailPage();
     return;
   }
 
@@ -684,7 +671,53 @@ function renderGamesPage(): void {
   const users = getUsers();
   renderScoreGrid(document.getElementById("games-score-grid"), users);
   renderServerTime(document.getElementById("games-server-time"), getServerTime());
+  renderGamesHub();
+}
+
+function renderGameDetailPage(): void {
+  const users = getUsers();
+  renderScoreGrid(document.getElementById("game-score-grid"), users);
+  renderServerTime(document.getElementById("game-server-time"), getServerTime());
   renderGameArea();
+}
+
+function renderGamesHub(): void {
+  const round = getCurrentRound();
+  const title = document.getElementById("games-round-title");
+  const summary = document.getElementById("games-round-summary");
+  const hub = document.getElementById("games-hub-grid");
+
+  if (title) {
+    title.textContent =
+      round.status === "collecting" ? `${gameTypeLabel(round.gameType)} 进行中` : "挑一个小游戏";
+  }
+
+  if (summary) {
+    summary.textContent =
+      round.status === "collecting"
+        ? `${round.summary} 正在带你跳到对应页面。`
+        : "猜拳、默契问答、猜数字、你比我猜都拆成独立页面了。";
+  }
+
+  if (!hub) {
+    return;
+  }
+
+  hub.innerHTML = GAME_CATALOG.map((item) => {
+    const href = buildGamePageHref(item.type);
+    const isActive = round.status === "collecting" && round.gameType === item.type;
+
+    return `
+      <a class="game-hub-card ${isActive ? "active" : ""}" data-game-link href="${href}">
+        <span class="game-hub-emoji">${item.emoji}</span>
+        <span class="game-hub-copy">
+          <strong>${item.label}</strong>
+          <small>${item.description}</small>
+        </span>
+        <span class="game-hub-arrow">${isActive ? "进行中" : "进入"}</span>
+      </a>
+    `;
+  }).join("");
 }
 
 function renderAdminPage(): void {
@@ -1110,196 +1143,65 @@ function renderScoreGrid(container: HTMLElement | null, users: UserProfile[]): v
     return;
   }
 
-  const round = getCurrentRound();
-  const onlineStatus = getOnlineStatus();
   const leftUser = users.find((user) => user.id === PRIMARY_USER_ID) ?? users[0];
   const rightUser = users.find((user) => user.id === SECONDARY_USER_ID) ?? users[1] ?? users[0];
-  const readyUsers = getReadyUsers(round, onlineStatus);
-  const bondState = getBondState(round, onlineStatus);
+  const round = getCurrentRound();
+  const onlineCount = [leftUser, rightUser].filter((user) => user.online).length;
+  const summaryText = buildCompactStatusSummary(round, onlineCount);
 
   container.innerHTML = `
-    <div class="bond-board bond-state-${bondState}">
-      ${renderBondPlayer(leftUser, "left", round, onlineStatus, readyUsers)}
-      <div class="bond-stage">
-        <div class="bond-progress" aria-hidden="true">
-          <span class="bond-progress-line left"></span>
-          <span class="bond-progress-line right"></span>
-        </div>
-        <div class="bond-orb">
-          <span class="bond-orb-label">${buildBondOrbLabel(bondState)}</span>
-          <span class="bond-spark spark-a"></span>
-          <span class="bond-spark spark-b"></span>
-          <span class="bond-spark spark-c"></span>
-          <span class="bond-spark spark-d"></span>
-        </div>
-        <p class="bond-center-note">${buildBondCenterNote(bondState, round, readyUsers.length)}</p>
+    <div class="compact-status-board" aria-label="双方连线状态">
+      ${renderCompactStatusPlayer(leftUser)}
+      <div class="compact-status-center">
+        <strong>${onlineCount}/2 在线</strong>
+        <p>${escapeHtml(summaryText)}</p>
       </div>
-      ${renderBondPlayer(rightUser, "right", round, onlineStatus, readyUsers)}
+      ${renderCompactStatusPlayer(rightUser)}
     </div>
   `;
 }
 
-function renderBondPlayer(
-  user: UserProfile,
-  side: "left" | "right",
-  round: RoundSnapshot,
-  onlineStatus: OnlineStatus,
-  readyUsers: UserId[],
-): string {
-  const isReady = readyUsers.includes(user.id);
-  const isCollecting = round.status === "collecting";
+function renderCompactStatusPlayer(user: UserProfile): string {
   const isCurrentUser = user.id === state.currentUser;
-  const otherUserId = user.id === PRIMARY_USER_ID ? SECONDARY_USER_ID : PRIMARY_USER_ID;
-  const otherOnline = onlineStatus[otherUserId];
-  const shouldShowBubble = user.online;
-  const canPoke = !isCurrentUser;
-  const actionLabel = user.online ? "比个心" : "戳一戳";
 
   return `
-    <article class="bond-player ${side} ${user.online ? "online" : "offline"} ${isReady ? "ready" : ""} ${
-      isCurrentUser ? "current-user" : ""
-    } ${state.pokedUserId === user.id ? "poked" : ""}">
-      ${
-        shouldShowBubble
-          ? `<span class="bond-bubble ${isReady ? "ready" : "online"}">${escapeHtml(
-              buildBondBubbleLabel(user.id, round, otherOnline),
-            )}</span>`
-          : ""
-      }
-      <div class="bond-avatar-wrap">
-        <span class="bond-avatar-ring"></span>
-        <span class="bond-avatar">${userAvatar(user.id)}</span>
+    <article class="compact-status-player ${user.online ? "online" : "offline"} ${isCurrentUser ? "current-user" : ""}">
+      <div class="compact-status-head">
+        <span class="compact-status-avatar">${userAvatar(user.id)}</span>
+        <div class="compact-status-copy">
+          <p class="compact-status-name">${escapeHtml(user.displayName)}</p>
+          <p class="compact-status-presence">
+            <span class="compact-status-dot" aria-hidden="true"></span>
+            ${user.online ? "在线" : "离线"}
+          </p>
+        </div>
       </div>
-      <div class="bond-copy">
-        <p class="bond-name">${escapeHtml(user.displayName)}</p>
-        <p class="bond-status">${escapeHtml(buildBondStatusLabel(user.id, user.online, isReady, isCollecting, otherOnline))}</p>
-      </div>
-      <div class="bond-score">
+      <div class="compact-status-score">
         <strong>${user.score}</strong>
         <span>分</span>
       </div>
-      ${canPoke ? `<button class="bond-action" type="button" data-poke-user="${user.id}">${actionLabel}</button>` : ""}
     </article>
   `;
 }
 
-function getReadyUsers(round: RoundSnapshot, onlineStatus: OnlineStatus): UserId[] {
+function buildCompactStatusSummary(round: RoundSnapshot, onlineCount: number): string {
+  if (onlineCount === 0) {
+    return "等待双方上线";
+  }
+
+  if (onlineCount === 1) {
+    return "另一位还未连接";
+  }
+
   if (round.status === "collecting") {
-    return round.choicesSubmitted;
+    return `${gameTypeLabel(round.gameType)}进行中`;
   }
 
-  return FIXED_USER_IDS.filter((userId) => onlineStatus[userId]);
-}
-
-function getBondState(round: RoundSnapshot, onlineStatus: OnlineStatus): string {
-  const allOnline = FIXED_USER_IDS.every((userId) => onlineStatus[userId]);
-
-  if (allOnline && round.status === "resolved") {
-    return "burst";
-  }
-
-  if (round.status === "collecting" && round.choicesSubmitted.length === 1) {
-    return round.choicesSubmitted[0] === PRIMARY_USER_ID ? "ready-left" : "ready-right";
-  }
-
-  if (allOnline) {
-    return "linked";
-  }
-
-  if (onlineStatus[PRIMARY_USER_ID]) {
-    return "ready-left";
-  }
-
-  if (onlineStatus[SECONDARY_USER_ID]) {
-    return "ready-right";
-  }
-
-  return "idle";
-}
-
-function buildBondOrbLabel(bondState: string): string {
-  if (bondState === "burst") {
-    return "Boom";
-  }
-
-  if (bondState === "idle") {
-    return "Wait";
-  }
-
-  return "Ready";
-}
-
-function buildBondCenterNote(bondState: string, round: RoundSnapshot, readyCount: number): string {
-  if (bondState === "burst") {
-    return "合体成功";
-  }
-
-  if (round.status === "collecting" && readyCount === 1) {
-    return "等另一位出手";
-  }
-
-  if (bondState === "linked") {
-    return "双人已连线";
-  }
-
-  if (bondState === "ready-left" || bondState === "ready-right") {
-    return "信号正在靠近";
-  }
-
-  return "等待连线";
-}
-
-function buildBondBubbleLabel(userId: UserId, round: RoundSnapshot, otherOnline: boolean): string {
-  if (round.status === "collecting" && round.choicesSubmitted.includes(userId)) {
-    return "Ready!";
-  }
-
-  if (otherOnline) {
-    return "已就位";
-  }
-
-  return "我来了";
-}
-
-function buildBondStatusLabel(
-  userId: UserId,
-  isOnline: boolean,
-  isReady: boolean,
-  isCollecting: boolean,
-  otherOnline: boolean,
-): string {
-  if (!isOnline) {
-    return otherOnline ? "等得花儿都谢了" : "正在赶来";
-  }
-
-  if (isCollecting) {
-    return isReady ? "已就位" : "还没出手";
-  }
-
-  if (otherOnline) {
-    return "已就位";
-  }
-
-  return userId === state.currentUser ? "先守在这" : "刚刚到场";
-}
-
-function triggerPokeVisual(userId: UserId): void {
-  state.pokedUserId = userId;
-
-  if (state.pokeTimer !== null) {
-    window.clearTimeout(state.pokeTimer);
-  }
-
-  renderActiveScoreGrid();
-
-  state.pokeTimer = window.setTimeout(() => {
-    state.pokedUserId = null;
-    renderActiveScoreGrid();
-  }, 1800);
+  return "双方已连接";
 }
 
 function renderActiveScoreGrid(): void {
-  const containerId = page === "games" ? "games-score-grid" : "score-grid";
+  const containerId = page === "games" ? "games-score-grid" : isGameDetailPage() ? "game-score-grid" : "score-grid";
   renderScoreGrid(document.getElementById(containerId), getUsers());
 }
 
@@ -1808,6 +1710,13 @@ function syncNavLinks(): void {
     link.href = `${url.pathname}${url.search}`;
   });
 
+  document.querySelectorAll<HTMLAnchorElement>("[data-game-link]").forEach((link) => {
+    const rawHref = link.getAttribute("href") ?? "/";
+    const url = new URL(rawHref, window.location.origin);
+    url.searchParams.set("user", state.currentUser);
+    link.href = `${url.pathname}${url.search}`;
+  });
+
   document.querySelectorAll<HTMLAnchorElement>("[data-profile-admin-link]").forEach((link) => {
     const url = new URL(link.getAttribute("href") ?? "/", window.location.origin);
     url.searchParams.set("user", state.currentUser);
@@ -1819,10 +1728,11 @@ function renderNavLinks(): void {
   const currentPath = window.location.pathname;
   const showAdminLink = isCurrentUserAdmin();
   document.body.dataset.isAdmin = showAdminLink ? "true" : "false";
+  const currentNavPath = isGameDetailPage() ? "/games.html" : currentPath;
 
   document.querySelectorAll<HTMLAnchorElement>("[data-page-link]").forEach((link) => {
     const linkPath = new URL(link.href, window.location.origin).pathname;
-    link.classList.toggle("active", linkPath === currentPath);
+    link.classList.toggle("active", linkPath === currentNavPath);
     if (link.hasAttribute("data-admin-only")) {
       link.hidden = !showAdminLink;
     }
@@ -2008,6 +1918,12 @@ function normalizeError(error: unknown): string {
 }
 
 function getDisplayedGameType(): GameType {
+  const pageGameType = getCurrentPageGameType();
+
+  if (pageGameType) {
+    return pageGameType;
+  }
+
   const round = getCurrentRound();
   return round.status === "collecting" ? round.gameType : state.selectedGameType;
 }
@@ -2017,6 +1933,60 @@ function syncGameSelectionFromSnapshot(round: RoundSnapshot): void {
     state.selectedGameType = round.gameType;
     localStorage.setItem(GAME_STORAGE_KEY, round.gameType);
   }
+}
+
+function getCurrentPageGameType(): GameType | null {
+  switch (page) {
+    case "rps":
+      return "rps";
+    case "telepathy":
+      return "telepathy";
+    case "guess-number":
+      return "guess-number";
+    case "charades":
+      return "charades";
+    default:
+      return null;
+  }
+}
+
+function isGameDetailPage(): boolean {
+  return getCurrentPageGameType() !== null;
+}
+
+function ensureCorrectGameRoute(round = getCurrentRound()): boolean {
+  if (round.status !== "collecting") {
+    return false;
+  }
+
+  const activePath = GAME_PAGE_PATHS[round.gameType];
+  const currentPath = window.location.pathname;
+
+  if (page === "games" && currentPath !== activePath) {
+    redirectToGamePage(round.gameType, state.currentUser);
+    return true;
+  }
+
+  const pageGameType = getCurrentPageGameType();
+
+  if (pageGameType && pageGameType !== round.gameType) {
+    redirectToGamePage(round.gameType, state.currentUser);
+    return true;
+  }
+
+  return false;
+}
+
+function buildGamePageHref(gameType: GameType): string {
+  const url = new URL(GAME_PAGE_PATHS[gameType], window.location.origin);
+  url.searchParams.set("user", state.currentUser);
+  return `${url.pathname}${url.search}`;
+}
+
+function redirectToGamePage(gameType: GameType, userId: UserId): void {
+  const url = new URL(GAME_PAGE_PATHS[gameType], window.location.origin);
+  url.searchParams.set("user", userId);
+  window.location.replace(`${url.pathname}${url.search}`);
 }
 
 function getGameCatalog(gameType: GameType) {

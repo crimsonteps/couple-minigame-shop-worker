@@ -6,6 +6,7 @@
   "scripts": {
     "build:frontend": "node scripts/build-frontend.mjs",
     "build:server": "node scripts/build-server.mjs",
+    "build:charades-words": "node scripts/generate-charades-word-bank.mjs",
     "dev:frontend": "node scripts/build-frontend.mjs --watch",
     "dev:server": "tsx watch src/index.ts",
     "dev": "npm-run-all --parallel dev:frontend dev:server",

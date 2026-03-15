@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Oh Kanh Mini Game - 游戏</title>
+    <title>Oh Kanh Mini Game - 你比我猜</title>
     <link rel="icon" href="/favicon.ico" type="image/x-icon" />
     <script>
       (() => {
@@ -21,12 +21,12 @@
     </script>
     <link rel="stylesheet" href="/styles.css" />
   </head>
-  <body data-page="games">
+  <body data-page="charades">
     <button class="theme-toggle" type="button" data-theme-toggle></button>
     <div class="page-shell">
       <header class="topbar">
         <div class="brand-box">
-          <h1>游戏厅</h1>
+          <h1>你比我猜</h1>
         </div>
         <nav class="nav-strip">
           <a data-page-link href="/games.html">游戏</a>
@@ -37,19 +37,16 @@
           <span class="pill soft identity-avatar" data-current-user-display></span>
         </div>
       </header>
-
       <main class="layout-stack">
         <section class="card hero-card">
           <div class="hero-copy">
-            <h2>挑一个小游戏</h2>
-            <p>四种玩法独立成页，随时开局并实时刷新双方状态与积分。</p>
+            <h2>系统给词，一人描述，一人来猜</h2>
           </div>
           <div class="hero-status">
             <span id="socket-pill" class="pill connecting">正在连接</span>
-            <span id="games-server-time" class="meta-text">--</span>
+            <span id="game-server-time" class="meta-text">--</span>
           </div>
         </section>
-
         <section class="card">
           <div class="section-head">
             <div>
@@ -57,32 +54,28 @@
               <h3>双方</h3>
             </div>
           </div>
-          <div id="games-score-grid" class="score-grid"></div>
+          <div id="game-score-grid" class="score-grid"></div>
         </section>
-
-        <section class="card">
-          <div class="section-head compact">
+        <section class="card game-card">
+          <div class="section-head">
             <div>
-              <p class="eyebrow">当前状态</p>
-              <h3 id="games-round-title">挑一个小游戏</h3>
+              <p class="eyebrow">当前游戏</p>
+              <h3>你比我猜</h3>
+            </div>
+            <div class="game-actions">
+              <button id="start-game-btn" class="primary-button" type="button">开始你比我猜</button>
+              <button id="force-end-game-btn" class="danger-button" type="button">强制结束当局</button>
             </div>
           </div>
-          <p id="games-round-summary" class="round-summary">猜拳、默契问答、猜数字、你比我猜都拆成独立页面了。</p>
-        </section>
-
-        <section class="card">
-          <div class="section-head compact">
-            <div>
-              <p class="eyebrow">游戏列表</p>
-              <h3>进入游戏</h3>
-            </div>
+          <div class="round-summary-box">
+            <p id="round-title" class="round-title">等待开始</p>
+            <p id="round-summary" class="round-summary">系统发一个词，一个人描述，另一个人来猜。</p>
           </div>
-          <div id="games-hub-grid" class="game-hub-grid"></div>
+          <div id="game-panel" class="game-panel"></div>
+          <p id="choice-hint" class="hint-text">结果和积分会自动结算。</p>
         </section>
-
       </main>
     </div>
-
     <div id="toast" class="toast" hidden></div>
     <script type="module" src="/app.js"></script>
   </body>
